@@ -1,0 +1,164 @@
+/* Flat white professional theme for Fridge Monitor */
+:root{
+  color-scheme: light;
+  --bg: #ffffff;
+  --bg-soft: #f7f8fa;
+  --panel: #ffffff;
+  --panel-strong: #ffffff;
+  --border: rgba(15,23,42,0.06);
+  --text: #0b1220;
+  --muted: #6b7280;
+  --accent: #0b5fff;
+  --accent-strong: #0047d1;
+  --danger: #d9534f;
+  --shadow: 0 6px 18px rgba(12,20,32,0.06);
+  --radius: 8px;
+}
+
+*{box-sizing:border-box}
+html,body,#root{min-height:100%}
+body{
+  margin:0;
+  font-family: Inter, "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background:var(--bg-soft);
+  color:var(--text);
+}
+a{color:inherit;text-decoration:none}
+button,input,select,textarea{font:inherit}
+
+/* Shell layout */
+.app-shell{display:grid;grid-template-columns:260px minmax(0,1fr);min-height:100vh}
+.sidebar{padding:20px;border-right:1px solid var(--border);background:var(--panel)}
+.brand-block{padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--panel);color:var(--text)}
+.brand-block h1{margin:6px 0 0;font-size:1.4rem}
+.brand-block p{margin:8px 0 0;color:var(--muted);font-size:0.95rem}
+.brand-kicker{display:inline-block;font-size:0.75rem;letter-spacing:0.12em;text-transform:uppercase;color:var(--muted)}
+
+.nav-links{display:grid;gap:8px;margin-top:18px}
+.nav-link{display:block;padding:8px 10px;border-radius:8px;color:var(--muted);transition:all 120ms ease}
+.nav-link:hover,.nav-link.is-active{background:rgba(11,95,255,0.06);color:var(--text);border-left:3px solid var(--accent)}
+
+/* Main panel */
+.main-panel{padding:20px}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;padding:12px;border-bottom:1px solid var(--border);background:transparent}
+.topbar strong{display:block;margin-top:4px}
+.topbar .topbar-actions{display:flex;gap:10px;align-items:center}
+.role-pill{padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-size:0.82rem;text-transform:uppercase;color:var(--muted)}
+
+.page-stack{display:grid;gap:12px}
+.page-heading{padding:16px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.page-heading h2{margin:6px 0 0;font-size:1.6rem}
+.page-heading p{margin:8px 0 0;color:var(--muted)}
+
+/* Grids */
+.fridge-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media(max-width:920px){.app-shell{grid-template-columns:1fr}.fridge-grid{grid-template-columns:1fr}}
+
+/* Fridge card - flat */
+.fridge-card{display:grid;gap:10px;padding:14px;border:1px solid var(--border);border-radius:8px;background:var(--panel);cursor:pointer;transition:box-shadow 120ms ease,transform 120ms ease}
+.fridge-card:hover{transform:translateY(-4px);box-shadow:var(--shadow)}
+.fridge-card-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.card-label{display:block;color:var(--muted);font-size:0.85rem}
+.fridge-card h3{margin:4px 0 0;font-size:1.1rem}
+.status-dot{padding:6px 10px;border-radius:999px;border:1px solid var(--border);font-size:0.78rem;text-transform:uppercase}
+.status-ok{background:rgba(34,197,94,0.12);color:#16a34a}
+.status-alert{background:rgba(220,38,38,0.08);color:#dc2626}
+.status-neutral{background:rgba(15,23,42,0.04);color:var(--muted)}
+
+.section-title{
+  padding-top: 8px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.fridge-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.fridge-metrics span{color:var(--muted);font-size:0.9rem}
+.fridge-metrics strong{display:block;margin-top:6px;font-size:1.2rem}
+
+.fridge-meta{
+  display:grid;
+  grid-template-columns:repeat(4,minmax(0,1fr));
+  gap:12px;
+  padding-top:8px;
+  align-items:center
+}
+.fridge-meta small{display:block;color:var(--muted);font-size:0.85rem}
+
+.fridge-name-input{padding:8px;border:1px solid var(--border);border-radius:6px}
+.icon-button{background:transparent;border:1px solid var(--border);padding:6px 8px;border-radius:6px;cursor:pointer}
+
+/* Forms and auth */
+.auth-form{display:grid;gap:12px;padding:18px}
+.auth-form label{display:grid;gap:8px;color:var(--muted);font-size:0.95rem}
+.auth-form input{width:100%;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:#ffffff;color:var(--text);outline:none}
+.auth-form input:focus{border-color:rgba(11,95,255,0.24);box-shadow:var(--shadow)}
+/* Wrapper opcional para centrar en toda la pantalla */
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+/* Rediseño de la tarjeta de login centrada */
+.login-card {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 420px; /* Limita el ancho para que no se estire */
+  margin: 40px auto; /* Centrado horizontal */
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.login-copy {
+  padding: 24px 24px 12px 24px;
+  text-align: center; /* Opcional: centra títulos y textos */
+}
+
+.auth-form {
+  display: grid;
+  gap: 16px;
+  padding: 0 24px 24px 24px;
+}
+
+/* Buttons */
+.button{display:inline-flex;align-items:center;justify-content:center;min-height:40px;padding:10px 14px;border-radius:8px;border:0;cursor:pointer}
+.button-primary{background:linear-gradient(135deg,var(--accent),var(--accent-strong));color:#fff;font-weight:700}
+.button-secondary{background:transparent;border:1px solid var(--border);color:var(--text)}
+.button:disabled{opacity:0.7;cursor:wait}
+
+/* Cards and shells */
+.card-shell{padding:16px;border:1px solid var(--border);border-radius:8px;background:var(--panel)}
+.state-card{padding:12px;border:1px solid var(--border);border-radius:8px;background:transparent;color:var(--muted)}
+.state-error{border-color:rgba(217,70,74,0.15);color:var(--danger)}
+
+/* Admin forms and lists alignment */
+.admin-layout{display:grid;grid-template-columns:minmax(0,0.9fr) minmax(0,1.1fr);gap:12px}
+.admin-form{display:grid;gap:12px}
+.admin-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.admin-table{display:grid;gap:10px}
+.admin-table-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px;border:1px solid var(--border);border-radius:8px;background:transparent}
+.admin-table-row strong{display:block}
+.admin-table-row small{display:block;color:var(--muted)}
+.button-row{display:flex;gap:8px}
+
+/* Charts */
+.chart-shell{display:grid;gap:12px}
+.chart-frame{min-height:300px;background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px}
+.empty-chart{padding:18px;border:1px dashed var(--border);border-radius:8px;text-align:center;color:var(--muted)}
+
+/* Misc */
+.route-state{color:var(--muted)}
+.placeholder-page{display:grid;place-items:center;padding:24px}
+
+@keyframes fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
+
+@media(max-width:640px){.fridge-grid{grid-template-columns:1fr}.fridge-meta{grid-template-columns:1fr}}

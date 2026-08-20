@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: fridge
+          POSTGRES_PASSWORD: fridge
+          POSTGRES_DB: fridge_monitor
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U fridge -d fridge_monitor"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DATABASE_URL: postgresql://fridge:fridge@localhost:5432/fridge_monitor?schema=public
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      INGEST_API_KEY: ci-ingest-api-key
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: Password123!
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Generate Prisma client
+        working-directory: backend
+        run: npx prisma generate
+
+      - name: Apply Prisma migrations
+        working-directory: backend
+        run: npx prisma migrate deploy
+
+      - name: Lint backend
+        working-directory: backend
+        run: npm run lint
+
+      - name: Lint frontend
+        working-directory: frontend
+        run: npm run lint
+
+      - name: Test backend
+        working-directory: backend
+        run: npm test
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Build backend image
+        run: docker build -t fridge-monitor-backend ./backend
+
+      - name: Build frontend image
+        run: docker build -t fridge-monitor-frontend ./frontend

@@ -1,0 +1,58 @@
+name: Deploy Azure
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build backend image
+        run: docker build -t ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-backend:${{ github.sha }} ./backend
+
+      - name: Build frontend image
+        run: docker build -t ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-frontend:${{ github.sha }} ./frontend
+
+      - name: Login to Azure Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}
+          username: ${{ secrets.AZURE_REGISTRY_USERNAME }}
+          password: ${{ secrets.AZURE_REGISTRY_PASSWORD }}
+
+      - name: Push backend image
+        run: docker push ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-backend:${{ github.sha }}
+
+      - name: Push frontend image
+        run: docker push ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-frontend:${{ github.sha }}
+
+      - name: Deploy backend to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_BACKEND_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_BACKEND_PUBLISH_PROFILE }}
+          images: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-backend:${{ github.sha }}
+
+      - name: Deploy frontend to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ secrets.AZURE_FRONTEND_APP_NAME }}
+          publish-profile: ${{ secrets.AZURE_FRONTEND_PUBLISH_PROFILE }}
+          images: ${{ secrets.AZURE_REGISTRY_LOGIN_SERVER }}/fridge-monitor-frontend:${{ github.sha }}

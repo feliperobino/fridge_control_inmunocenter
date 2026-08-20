@@ -1,0 +1,91 @@
+// Minimal Prisma schema placeholder so `prisma` commands find the file.
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum AlarmType {
+  TEMP_HIGH
+  TEMP_LOW
+  HUM_HIGH
+  HUM_LOW
+  SENSOR_OFFLINE
+}
+
+enum ReportFormat {
+  CSV
+  XLSX
+  PDF
+}
+
+model User {
+  id              String            @id @default(uuid())
+  email           String            @unique
+  passwordHash    String
+  role            Role              @default(USER)
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  reportSchedules ReportSchedule[] @relation("Creator")
+}
+
+model Fridge {
+  id            String         @id @default(uuid())
+  name          String
+  location      String?
+  modbusSlaveId Int            @unique
+  tempMin       Float
+  tempMax       Float
+  humMin        Float
+  humMax        Float
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  readings      Reading[]
+  alarmEvents   AlarmEvent[]
+}
+
+model Reading {
+  id         String   @id @default(uuid())
+  fridge     Fridge   @relation(fields: [fridgeId], references: [id])
+  fridgeId   String
+  temperature Float
+  humidity    Float
+  recordedAt  DateTime
+  receivedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  @@index([fridgeId, recordedAt])
+}
+
+model AlarmEvent {
+  id         String    @id @default(uuid())
+  fridge     Fridge    @relation(fields: [fridgeId], references: [id])
+  fridgeId   String
+  type       AlarmType
+  startedAt  DateTime
+  resolvedAt DateTime?
+  notified   Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+}
+
+model ReportSchedule {
+  id             String       @id @default(uuid())
+  name           String
+  cronExpression String
+  format         ReportFormat
+  recipients     String[]
+  fridgeIds      String[]
+  active         Boolean      @default(true)
+  createdBy      User         @relation("Creator", fields: [createdById], references: [id])
+  createdById    String
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+}
