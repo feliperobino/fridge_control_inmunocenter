@@ -1,5 +1,5 @@
 FROM node:20-alpine AS builder
-
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 COPY package*.json ./
@@ -10,7 +10,7 @@ COPY src ./src
 RUN npx prisma generate
 
 FROM node:20-alpine
-
+RUN apk add --no-cache openssl
 WORKDIR /app
 
 ENV NODE_ENV=production
