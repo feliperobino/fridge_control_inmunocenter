@@ -1,29 +1,10 @@
-function formatLastReadingTime(recordedAt) {
-  if (!recordedAt) {
-    return 'sin datos';
-  }
+import { useEffect, useState } from 'react';
+import { getFridgeReadings, updateFridge } from '../api/fridges.js';
 
-  const diffMinutes = Math.floor((Date.now() - new Date(recordedAt).getTime()) / 60000);
-
-  if (Number.isNaN(diffMinutes)) {
-    return 'sin datos';
-  }
-
-  if (diffMinutes < 1) {
-    return 'hace menos de 1 min';
-  }
-
-  if (diffMinutes < 60) {
-    return `hace ${diffMinutes} min`;
-  }
-
-  const hours = Math.floor(diffMinutes / 60);
-  if (hours < 24) {
-    return `hace ${hours} h`;
-  }
-
-  const days = Math.floor(hours / 24);
-  return `hace ${days} d`;
+// helper to check temp range only (as requirement states 2-8°C range)
+function tempInRange(r, fridge) {
+  if (!r || !fridge) return false;
+  return r.temperature >= fridge.tempMin && r.temperature <= fridge.tempMax;
 }
 
 function isWithinRange(fridge, reading) {
@@ -37,9 +18,6 @@ function isWithinRange(fridge, reading) {
   return tempOk && humOk;
 }
 
-import { useEffect, useState } from 'react';
-import { getFridgeReadings, updateFridge } from '../api/fridges.js';
-
 export function FridgeCard({ fridge, onClick }) {
   const latestReading = fridge?.latestReading || null;
   const hasData = Boolean(latestReading?.recordedAt);
@@ -52,7 +30,6 @@ export function FridgeCard({ fridge, onClick }) {
 
   const [dayOffset, setDayOffset] = useState(0);
   const [stats, setStats] = useState(null);
-  const [loadingStats, setLoadingStats] = useState(false);
 
   useEffect(() => {
     setName(fridge.name || '');
@@ -71,7 +48,6 @@ export function FridgeCard({ fridge, onClick }) {
     let cancelled = false;
 
     async function loadStats() {
-      setLoadingStats(true);
       setStats(null);
 
       try {
@@ -87,28 +63,20 @@ export function FridgeCard({ fridge, onClick }) {
         let inRangeMs = 0;
         let outRangeMs = 0;
 
-        // helper to check temp range only (as requirement states 2-8°C range)
-        function tempInRange(r) {
-          if (!r) return false;
-          return r.temperature >= fridge.tempMin && r.temperature <= fridge.tempMax;
-        }
-
         // sort ascending
         readings.sort((a, b) => new Date(a.recordedAt) - new Date(b.recordedAt));
 
         const dayStart = new Date(from).getTime();
         const dayEnd = new Date(to).getTime();
 
-        if (readings.length === 0) {
-          // nothing
-        } else {
+        if (readings.length > 0) {
           for (let i = 0; i < readings.length; i++) {
             const cur = readings[i];
             const next = readings[i + 1];
             const curTs = new Date(cur.recordedAt).getTime();
             const nextTs = next ? new Date(next.recordedAt).getTime() : dayEnd;
             const duration = Math.max(0, Math.min(nextTs, dayEnd) - Math.max(curTs, dayStart));
-            if (tempInRange(cur)) {
+            if (tempInRange(cur, fridge)) {
               inRangeMs += duration;
             } else {
               outRangeMs += duration;
@@ -155,8 +123,6 @@ export function FridgeCard({ fridge, onClick }) {
         // eslint-disable-next-line no-console
         console.error('Failed to load fridge stats', fridge.id, err && (err.message || err));
         if (!cancelled) setStats(null);
-      } finally {
-        if (!cancelled) setLoadingStats(false);
       }
     }
 
@@ -165,7 +131,7 @@ export function FridgeCard({ fridge, onClick }) {
     return () => {
       cancelled = true;
     };
-  }, [fridge.id, fridge.tempMin, fridge.tempMax, dayOffset]);
+  }, [fridge, dayOffset]);
 
   function formatDuration(ms) {
     const minutes = Math.round(ms / 60000);
@@ -294,7 +260,7 @@ export function FridgeCard({ fridge, onClick }) {
           <strong>{stats ? stats.readingsCount : '—'}</strong>
         </div>
       </div>
-      
+
       <div className="section-title">Estadísticas del día</div>
 
       <div className="fridge-meta flat-meta">
