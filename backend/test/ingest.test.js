@@ -50,10 +50,13 @@ describe('POST /api/ingest', () => {
     await request(app)
       .post('/api/ingest')
       .send({
-        fridgeId: testFridge.modbusSlaveId,
-        temperature: 5.2,
-        humidity: 41.8,
-        recordedAt: '2026-08-07T12:00:00.000Z'
+        modbus_temp_RH: [
+          {
+            ID: `read_sens_${testFridge.modbusSlaveId}`,
+            data: [52, 418],
+            D: '2026-08-07T12:00:00.000Z'
+          }
+        ]
       })
       .expect(401);
   });
@@ -63,18 +66,18 @@ describe('POST /api/ingest', () => {
       .post('/api/ingest')
       .set('X-API-Key', env.ingestApiKey)
       .send({
-        fridgeId: testFridge.modbusSlaveId,
-        temperature: 5.2,
-        humidity: 41.8,
-        recordedAt: '2026-08-07T12:00:00.000Z'
+        modbus_temp_RH: [
+          {
+            ID: `read_sens_${testFridge.modbusSlaveId}`,
+            data: [52, 418], // 52 / 10 = 5.2°C, 418 / 10 = 41.8%
+            D: '2026-08-07T12:00:00.000Z'
+          }
+        ]
       })
       .expect(201);
 
-    expect(response.body.reading).toMatchObject({
-      fridgeId,
-      temperature: 5.2,
-      humidity: 41.8,
-      recordedAt: '2026-08-07T12:00:00.000Z'
+    expect(response.body.processed[0]).toMatchObject({
+      fridgeId
     });
 
     const storedReading = await prisma.reading.findFirst({
