@@ -6,7 +6,7 @@ const DATA_KEY = 'modbus_temp_RH';
 const SCALE = 10; // XY-MD02 manda valores x10 (211 = 21.1)
 
 const batchItemSchema = z.object({
-  TS: z.string().optional(),
+  TS: z.union([z.string(), z.number()]).optional(),
   ID: z.string(), // "read_sens_1".."read_sens_4"
   D: z.string().optional(), // ISO8601
   data: z.array(z.number()).length(2) // [rawTemp, rawHum]
@@ -15,8 +15,6 @@ const batchItemSchema = z.object({
 const batchSchema = z.array(batchItemSchema).min(1);
 
 function extractSlaveId(requestName) {
-  // "read_sens_1" -> 1. Si cambian la convención de nombres, ajustar acá
-  // (o mejor: agregar columna Fridge.requestName y mapear por eso en vez de regex).
   const match = requestName.match(/(\d+)\s*$/);
   return match ? Number(match[1]) : null;
 }
@@ -26,10 +24,12 @@ function resolveRecordedAt(item) {
     const d = new Date(item.D);
     if (!Number.isNaN(d.getTime())) return d;
   }
-  if (item.TS) {
-    // fallback si D viniera vacío: TS suele ser epoch en segundos
+  if (item.TS !== undefined) {
     const t = Number(item.TS);
-    if (Number.isFinite(t)) return new Date(t * 1000);
+    if (Number.isFinite(t)) {
+      // Si el timestamp viene en segundos (ej. 1724731200), multiplicar por 1000
+      return new Date(t < 10000000000 ? t * 1000 : t);
+    }
   }
   return new Date(); // último fallback: hora de recepción
 }
@@ -85,12 +85,20 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
 }
 
 export async function ingest(req, res) {
-  // Soporta el batch real del router ({ modbus_temp_RH: [...] }) y,
-  // por conveniencia para tests manuales, un array top-level también.
+  // -------------------------------------------------------------
+  // PASO 1.1: LOG DE INSPECCIÓN (Imprime headers y body recibidos)
+  // -------------------------------------------------------------
+  console.log("================ INGEST PAYLOAD RECIBIDO ================");
+  console.log("Headers:", JSON.stringify(req.headers, null, 2));
+  console.log("Body:", JSON.stringify(req.body, null, 2));
+  console.log("========================================================");
+
+  // Soporta el batch real del router ({ modbus_temp_RH: [...] }) y un array top-level.
   const rawItems = Array.isArray(req.body) ? req.body : req.body?.[DATA_KEY];
 
   const parsedBatch = batchSchema.safeParse(rawItems);
   if (!parsedBatch.success) {
+    console.error("Error en formato de payload recibidito:", parsedBatch.error.flatten());
     return res.status(400).json({ error: 'Invalid payload', details: parsedBatch.error.flatten() });
   }
 
@@ -115,7 +123,6 @@ export async function ingest(req, res) {
     .map((r) => ({ error: r.reason?.message ?? 'Unknown error' }));
 
   if (failed.length > 0) {
-    // Loggear pero no romper todo el batch por un item malo
     console.warn('Ingest: algunos items fallaron', failed);
   }
 
