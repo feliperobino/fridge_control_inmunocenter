@@ -9,9 +9,8 @@ export default function DashboardPage({ isKiosk = false }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Permite activar modo kiosk por prop o por querystring ?fullscreen=1
   const isFullscreenParam = searchParams.get('fullscreen') === '1';
-  const [isFullscreen, setIsFullscreen] = useState(isKiosk || isFullscreenParam);
+  const isFullscreen = isKiosk || isFullscreenParam;
 
   const [fridges, setFridges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -41,22 +40,17 @@ export default function DashboardPage({ isKiosk = false }) {
     });
   }, [loadFridges]);
 
-  // Sincronizar cambios de pantalla completa nativa con el navegador
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (!document.fullscreenElement) {
-        // Si sale de fullscreen nativo, actualizamos estado y URL
-        setIsFullscreen(false);
-        if (searchParams.get('fullscreen') === '1') {
-          searchParams.delete('fullscreen');
-          setSearchParams(searchParams);
-        }
+      if (!document.fullscreenElement && isFullscreenParam) {
+        searchParams.delete('fullscreen');
+        setSearchParams(searchParams);
       }
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [searchParams, setSearchParams]);
+  }, [isFullscreenParam, searchParams, setSearchParams]);
 
   const toggleFullscreen = async () => {
     if (!isFullscreen) {
@@ -66,31 +60,41 @@ export default function DashboardPage({ isKiosk = false }) {
         }
       } catch (e) {
         // eslint-disable-next-line no-console
-        console.warn('Fullscreen API bloqueda o no soportada', e);
+        console.warn('Fullscreen no soportado', e);
       }
-      setIsFullscreen(true);
       setSearchParams({ fullscreen: '1' });
     } else {
       if (document.fullscreenElement && document.exitFullscreen) {
         await document.exitFullscreen();
       }
-      setIsFullscreen(false);
       searchParams.delete('fullscreen');
       setSearchParams(searchParams);
+      if (isKiosk) navigate('/dashboard');
     }
   };
 
   return (
-    <section className={`page-stack ${isFullscreen ? 'kiosk-mode-active' : ''}`}>
-      <div className="dashboard-controls-bar">
+    <section className={isFullscreen ? 'kiosk-viewport' : 'page-stack'}>
+      {!isFullscreen ? (
+        <div className="dashboard-controls-bar">
+          <button
+            type="button"
+            className="button button-primary kiosk-toggle-btn"
+            onClick={toggleFullscreen}
+          >
+            ⛶ Modo Fullscreen / Kiosk
+          </button>
+        </div>
+      ) : (
         <button
           type="button"
-          className={`button ${isFullscreen ? 'button-secondary' : 'button-primary'} kiosk-toggle-btn`}
+          className="kiosk-exit-btn"
           onClick={toggleFullscreen}
+          title="Salir de modo kiosk"
         >
-          {isFullscreen ? '✕ Salir de Fullscreen' : '⛶ Modo Fullscreen / Kiosk'}
+          ✕ Salir
         </button>
-      </div>
+      )}
 
       {isLoading ? <div className="route-state">Cargando refrigeradores...</div> : null}
       {error ? <div className="state-card state-error">{error}</div> : null}

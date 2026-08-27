@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext.jsx';
 
 const navItems = [
@@ -9,6 +9,17 @@ const navItems = [
 
 export function Layout() {
   const { logout, user } = useAuth();
+  const [searchParams] = useSearchParams();
+  const isKiosk = searchParams.get('fullscreen') === '1' || window.location.pathname === '/dashboard/kiosk';
+
+  // Si estamos en modo Kiosk, renderizamos el contenido directamente sin el cascarón de la UI
+  if (isKiosk) {
+    return (
+      <div className="kiosk-layout-container">
+        <Outlet />
+      </div>
+    );
+  }
 
   return (
     <div className="app-shell">
