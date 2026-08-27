@@ -2,13 +2,29 @@ let source = null;
 const listeners = new Set();
 const statusListeners = new Set();
 
-let connectionStatus = 'DISCONNECTED'; // 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'
+let connectionStatus = 'DISCONNECTED'; // 'CONNECTED' | 'DISCONNECTED'
+let lastActivityTimestamp = null;
+let activityTimer = null;
+
+// Tiempo máximo sin recibir datos/ping antes de considerar desconectado (5 minutos)
+const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; 
 
 function setStatus(newStatus) {
   if (connectionStatus !== newStatus) {
     connectionStatus = newStatus;
     statusListeners.forEach((cb) => cb(connectionStatus));
   }
+}
+
+function registerActivity() {
+  lastActivityTimestamp = Date.now();
+  setStatus('CONNECTED');
+
+  // Reiniciar el temporizador de inactividad
+  if (activityTimer) clearTimeout(activityTimer);
+  activityTimer = setTimeout(() => {
+    setStatus('DISCONNECTED');
+  }, INACTIVITY_TIMEOUT_MS);
 }
 
 function ensureConnection() {
@@ -21,22 +37,21 @@ function ensureConnection() {
     ? `${apiUrl}/api/events?token=${encodeURIComponent(token)}`
     : `${apiUrl}/api/events`;
 
-  setStatus('CONNECTING');
   source = new EventSource(url);
 
-  // 1. Al abrir el socket nativo SSE
+  // Al conectar exitosamente
   source.onopen = () => {
-    setStatus('CONNECTED');
+    registerActivity();
   };
 
-  // 2. Por si el servidor emite el evento custom 'connected'
+  // Evento custom de bienvenida o pings
   source.addEventListener('connected', () => {
-    setStatus('CONNECTED');
+    registerActivity();
   });
 
-  // 3. Si llega un evento de lecturas, confirmamos que estamos conectados
+  // Evento de nuevas lecturas
   source.addEventListener('readings-updated', (event) => {
-    setStatus('CONNECTED');
+    registerActivity();
     let detail = null;
     try {
       detail = JSON.parse(event.data);
@@ -46,13 +61,16 @@ function ensureConnection() {
     listeners.forEach((cb) => cb(detail));
   });
 
-  // 4. Si hay un corte o error de red
+  // Pings del heartbeat
+  source.addEventListener('ping', () => {
+    registerActivity();
+  });
+
   source.onerror = () => {
-    // Solo pasamos a DISCONNECTED si la conexión se cerró realmente
-    if (source.readyState === EventSource.CLOSED || source.readyState === EventSource.CONNECTING) {
-      setStatus('CONNECTING');
-    } else {
-      setStatus('DISCONNECTED');
+    // Si hay error de red, no cambiamos inmediatamente el estado visual 
+    // a menos que venza el INACTIVITY_TIMEOUT_MS, o si la conexión se cierra.
+    if (source.readyState === EventSource.CLOSED) {
+      source = null; // Permitir reconexión limpia
     }
   };
 }
@@ -66,7 +84,7 @@ export function subscribeToReadingsUpdated(callback) {
 export function subscribeToRealtimeStatus(callback) {
   ensureConnection();
   statusListeners.add(callback);
-  callback(connectionStatus); // Notificar estado actual inmediatamente
+  callback(connectionStatus);
   return () => statusListeners.delete(callback);
 }
 

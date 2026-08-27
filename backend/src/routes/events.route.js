@@ -33,8 +33,8 @@ router.get('/events', (req, res) => {
   const onUpdate = (payload) => send('readings-updated', payload);
   realtimeBus.on('readings-updated', onUpdate);
 
-  // Heartbeat cada 25 segundos
-  const heartbeat = setInterval(() => res.write(': ping\n\n'), 25000);
+  // heartbeat para mantener viva la conexión y notificar actividad
+  const heartbeat = setInterval(() => send('ping', { ok: true }), 25000);
 
   req.on('close', () => {
     clearInterval(heartbeat);
