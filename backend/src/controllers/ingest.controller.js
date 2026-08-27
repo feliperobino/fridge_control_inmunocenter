@@ -2,6 +2,8 @@ import { z } from 'zod';
 import prisma from '../config/prisma.js';
 import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js';
 
+import { pushSample } from '../services/reading_buffer.service.js';
+
 const DATA_KEY = 'modbus_temp_RH';
 const SCALE = 10; // XY-MD02 manda valores x10 (211 = 21.1)
 
@@ -85,15 +87,11 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
 }
 
 export async function ingest(req, res) {
-  // -------------------------------------------------------------
-  // PASO 1.1: LOG DE INSPECCIÓN (Imprime headers y body recibidos)
-  // -------------------------------------------------------------
   console.log("================ INGEST PAYLOAD RECIBIDO ================");
   console.log("Headers:", JSON.stringify(req.headers, null, 2));
   console.log("Body:", JSON.stringify(req.body, null, 2));
   console.log("========================================================");
 
-  // Soporta el batch real del router ({ modbus_temp_RH: [...] }) y un array top-level.
   const rawItems = Array.isArray(req.body) ? req.body : req.body?.[DATA_KEY];
 
   const parsedBatch = batchSchema.safeParse(rawItems);
@@ -108,12 +106,14 @@ export async function ingest(req, res) {
       if (modbusSlaveId === null) {
         return Promise.reject(new Error(`No pude resolver slaveId desde ID="${item.ID}"`));
       }
-      return processSingleReading({
-        modbusSlaveId,
+
+      const averaged = pushSample(modbusSlaveId, {
         temperature: item.data[0] / SCALE,
         humidity: item.data[1] / SCALE,
         recordedAt: resolveRecordedAt(item)
       });
+
+      return processSingleReading({ modbusSlaveId, ...averaged });
     })
   );
 
