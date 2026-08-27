@@ -1,6 +1,7 @@
 // Minimal Prisma schema placeholder so `prisma` commands find the file.
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {

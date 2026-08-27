@@ -1,4 +1,4 @@
-FROM node:20-alpine AS builder
+FROM node:20-alpine3.19 AS builder
 RUN apk add --no-cache openssl
 WORKDIR /app
 
