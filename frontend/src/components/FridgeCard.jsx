@@ -1,5 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { getFridgeReadings, updateFridge } from '../api/fridges.js';
+import { subscribeToReadingsUpdated } from '../api/realtime.js';
+
+function formatTime(isoString) {
+  if (!isoString) return null;
+  const d = new Date(isoString);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+}
 
 // helper to check temp range only (as requirement states 2-8°C range)
 function tempInRange(r, fridge) {
@@ -44,11 +52,9 @@ export function FridgeCard({ fridge, onClick }) {
     return () => window.removeEventListener('fridge-monitor:reset-day', handleReset);
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStats() {
-      setStats(null);
+  const loadStats = useCallback(
+    async ({ silent } = {}) => {
+      if (!silent) setStats(null);
 
       try {
         const date = new Date();
@@ -118,20 +124,31 @@ export function FridgeCard({ fridge, onClick }) {
           readingsCount: readings.length
         };
 
-        if (!cancelled) setStats(result);
+        setStats(result);
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('Failed to load fridge stats', fridge.id, err && (err.message || err));
-        if (!cancelled) setStats(null);
+        setStats(null);
       }
-    }
+    },
+    [fridge, dayOffset]
+  );
 
+  useEffect(() => {
     loadStats();
+  }, [loadStats]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [fridge, dayOffset]);
+  // Refresco en vivo: el backend emite un evento por cada ráfaga de ingesta procesada
+  // (no uno por muestra), así que esto no re-dispara 4 veces por lectura.
+  useEffect(() => {
+    return subscribeToReadingsUpdated(() => {
+      // Solo refrescamos si se está viendo "hoy"; si el usuario navegó a un día
+      // anterior, una lectura nueva no debería moverle el piso de golpe.
+      if (dayOffset === 0) {
+        loadStats({ silent: true });
+      }
+    });
+  }, [dayOffset, loadStats]);
 
   function formatDuration(ms) {
     const minutes = Math.round(ms / 60000);
@@ -256,8 +273,8 @@ export function FridgeCard({ fridge, onClick }) {
           <strong>{hasData ? `${latestReading.humidity.toFixed(1)}%` : '--'}</strong>
         </div>
         <div>
-          <span>Lecturas del día</span>
-          <strong>{stats ? stats.readingsCount : '—'}</strong>
+          <span>Última lectura</span>
+          <strong>{hasData ? formatTime(latestReading.recordedAt) || '--' : '--'}</strong>
         </div>
       </div>
 

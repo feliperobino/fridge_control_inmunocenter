@@ -3,6 +3,7 @@ import prisma from '../config/prisma.js';
 import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js';
 
 import { pushSample } from '../services/reading_buffer.service.js';
+import { emitReadingsUpdated } from '../services/realtime.service.js';
 
 const DATA_KEY = 'modbus_temp_RH';
 const SCALE = 10; // XY-MD02 manda valores x10 (211 = 21.1)
@@ -124,6 +125,11 @@ export async function ingest(req, res) {
 
   if (failed.length > 0) {
     console.warn('Ingest: algunos items fallaron', failed);
+  }
+
+  // Un solo emit por request procesado (una ráfaga), no uno por item del batch.
+  if (processed.length > 0) {
+    emitReadingsUpdated(processed.map((p) => p.fridgeId));
   }
 
   return res.status(201).json({ processed, failed });

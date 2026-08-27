@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { apiRequest } from '../api/client.js';
 import { FridgeCard } from '../components/FridgeCard.jsx';
+import { subscribeToReadingsUpdated } from '../api/realtime.js';
 
 export default function DashboardPage() {
   const navigate = useNavigate();
@@ -9,38 +10,31 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let isMounted = true;
+  const loadFridges = useCallback(async ({ silent } = {}) => {
+    if (!silent) setIsLoading(true);
+    setError('');
 
-    async function loadFridges() {
-      setIsLoading(true);
-      setError('');
-
-      try {
-        const data = await apiRequest('/fridges');
-
-        if (!isMounted) {
-          return;
-        }
-
-        setFridges(Array.isArray(data) ? data : []);
-      } catch (loadError) {
-        if (isMounted) {
-          setError(loadError?.data?.error || 'No se pudo cargar el dashboard');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
+    try {
+      const data = await apiRequest('/fridges');
+      setFridges(Array.isArray(data) ? data : []);
+    } catch (loadError) {
+      setError(loadError?.data?.error || 'No se pudo cargar el dashboard');
+    } finally {
+      if (!silent) setIsLoading(false);
     }
-
-    loadFridges();
-
-    return () => {
-      isMounted = false;
-    };
   }, []);
+
+  useEffect(() => {
+    loadFridges();
+  }, [loadFridges]);
+
+  // Refresco en vivo: el backend emite un evento por cada ráfaga de ingesta
+  // procesada (no uno por sensor), así que esto no re-dispara 4 veces por lectura.
+  useEffect(() => {
+    return subscribeToReadingsUpdated(() => {
+      loadFridges({ silent: true });
+    });
+  }, [loadFridges]);
 
   return (
     <section className="page-stack">

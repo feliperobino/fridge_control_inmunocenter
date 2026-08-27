@@ -1,17 +1,17 @@
 import prisma from '../config/prisma.js';
 
-function parseBoundedInteger(value, fallback, minimum, maximum) {
+function parseClampedInteger(value, fallback, minimum, maximum) {
   if (value === undefined) {
     return fallback;
   }
 
   const parsed = Number.parseInt(value, 10);
 
-  if (!Number.isInteger(parsed) || parsed < minimum || parsed > maximum) {
-    return null;
+  if (!Number.isInteger(parsed)) {
+    return fallback;
   }
 
-  return parsed;
+  return Math.min(maximum, Math.max(minimum, parsed));
 }
 
 function parseDateFilter(value) {
@@ -73,12 +73,15 @@ export async function getFridge(req, res) {
 
 export async function listReadings(req, res) {
   const { id } = req.params;
-  const limit = parseBoundedInteger(req.query.limit, 50, 1, 200, 'limit');
-  const offset = parseBoundedInteger(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER, 'offset');
+  // Tope subido a 20000 (~ un día completo a cadencia de 5s por sensor, con margen)
+  // y ahora se recorta en vez de rechazar: un límite fuera de rango nunca debería
+  // tumbar toda la vista de estadísticas del día.
+  const limit = parseClampedInteger(req.query.limit, 50, 1, 20000);
+  const offset = parseClampedInteger(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
   const from = parseDateFilter(req.query.from);
   const to = parseDateFilter(req.query.to);
 
-  if (limit === null || offset === null || req.query.from && !from || req.query.to && !to) {
+  if (req.query.from && !from || req.query.to && !to) {
     return res.status(400).json({ error: 'Invalid query parameters' });
   }
 
