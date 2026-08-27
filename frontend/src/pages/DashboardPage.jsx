@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { apiRequest } from '../api/client.js';
 import { FridgeCard } from '../components/FridgeCard.jsx';
 import { FridgeTile } from '../components/FridgeTile.jsx';
-import { subscribeToReadingsUpdated } from '../api/realtime.js';
+import { subscribeToReadingsUpdated, subscribeToRealtimeStatus } from '../api/realtime.js';
 
 export default function DashboardPage({ isKiosk = false }) {
   const navigate = useNavigate();
@@ -15,6 +15,7 @@ export default function DashboardPage({ isKiosk = false }) {
   const [fridges, setFridges] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [sseStatus, setSseStatus] = useState('DISCONNECTED');
 
   const loadFridges = useCallback(async ({ silent } = {}) => {
     if (!silent) setIsLoading(true);
@@ -34,10 +35,29 @@ export default function DashboardPage({ isKiosk = false }) {
     loadFridges();
   }, [loadFridges]);
 
+  // Suscripción al bus SSE
   useEffect(() => {
-    return subscribeToReadingsUpdated(() => {
+    const unsubscribeReadings = subscribeToReadingsUpdated(() => {
       loadFridges({ silent: true });
     });
+
+    const unsubscribeStatus = subscribeToRealtimeStatus((status) => {
+      setSseStatus(status);
+    });
+
+    return () => {
+      unsubscribeReadings();
+      unsubscribeStatus();
+    };
+  }, [loadFridges]);
+
+  // Polling de respaldo cada 45 segundos en caso de microcortes de SSE
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadFridges({ silent: true });
+    }, 45000);
+
+    return () => clearInterval(interval);
   }, [loadFridges]);
 
   useEffect(() => {
@@ -77,6 +97,11 @@ export default function DashboardPage({ isKiosk = false }) {
     <section className={isFullscreen ? 'kiosk-viewport' : 'page-stack'}>
       {!isFullscreen ? (
         <div className="dashboard-controls-bar">
+          <div className="realtime-status-indicator">
+            <span className={`status-dot-mini ${sseStatus.toLowerCase()}`} />
+            <small>{sseStatus === 'CONNECTED' ? 'En vivo' : 'Reconectando...'}</small>
+          </div>
+
           <button
             type="button"
             className="button button-primary kiosk-toggle-btn"
@@ -86,14 +111,21 @@ export default function DashboardPage({ isKiosk = false }) {
           </button>
         </div>
       ) : (
-        <button
-          type="button"
-          className="kiosk-exit-btn"
-          onClick={toggleFullscreen}
-          title="Salir de modo kiosk"
-        >
-          ✕ Salir
-        </button>
+        <>
+          <div className="kiosk-status-overlay">
+            <span className={`status-dot-mini ${sseStatus.toLowerCase()}`} />
+            <span>{sseStatus === 'CONNECTED' ? 'EN VIVO' : 'RECONECTANDO'}</span>
+          </div>
+
+          <button
+            type="button"
+            className="kiosk-exit-btn"
+            onClick={toggleFullscreen}
+            title="Salir de modo kiosk"
+          >
+            ✕ Salir
+          </button>
+        </>
       )}
 
       {isLoading ? <div className="route-state">Cargando refrigeradores...</div> : null}

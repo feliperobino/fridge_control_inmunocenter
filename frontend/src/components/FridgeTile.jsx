@@ -2,7 +2,7 @@ function formatTime(isoString) {
   if (!isoString) return null;
   const d = new Date(isoString);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
 }
 
 function isWithinRange(fridge, reading) {

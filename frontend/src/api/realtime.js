@@ -1,38 +1,66 @@
-// Cliente SSE compartido: una sola conexión para toda la app, sin importar
-// cuántos FridgeCard estén montados escuchando.
 let source = null;
 const listeners = new Set();
+const statusListeners = new Set();
+
+let connectionStatus = 'DISCONNECTED'; // 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED'
+
+function setStatus(newStatus) {
+  if (connectionStatus !== newStatus) {
+    connectionStatus = newStatus;
+    statusListeners.forEach((cb) => cb(connectionStatus));
+  }
+}
 
 function ensureConnection() {
   if (source) return;
 
-  const apiUrl = import.meta.env.VITE_API_URL;
-  source = new EventSource(`${apiUrl}/api/events`);
+  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const token = localStorage.getItem('token'); // Recuperar JWT si existe
+
+  const url = token
+    ? `${apiUrl}/api/events?token=${encodeURIComponent(token)}`
+    : `${apiUrl}/api/events`;
+
+  setStatus('CONNECTING');
+  source = new EventSource(url);
+
+  source.onopen = () => {
+    setStatus('CONNECTED');
+  };
+
+  source.addEventListener('connected', () => {
+    setStatus('CONNECTED');
+  });
 
   source.addEventListener('readings-updated', (event) => {
     let detail = null;
     try {
       detail = JSON.parse(event.data);
     } catch {
-      // payload no crítico, seguimos igual
+      // payload no crítico
     }
     listeners.forEach((cb) => cb(detail));
   });
 
   source.onerror = () => {
-    // EventSource reintenta la conexión solo; no hace falta manejarlo aquí.
-    // eslint-disable-next-line no-console
-    console.warn('SSE de lecturas desconectado, reintentando...');
+    setStatus('DISCONNECTED');
+    // EventSource reconecta automáticamente
   };
 }
 
-/**
- * Se suscribe a "llegó una ráfaga nueva de lecturas". El callback se llama
- * una vez por request de ingest procesado (no una vez por muestra/sensor).
- * Devuelve una función para cancelar la suscripción.
- */
 export function subscribeToReadingsUpdated(callback) {
   ensureConnection();
   listeners.add(callback);
   return () => listeners.delete(callback);
+}
+
+export function subscribeToRealtimeStatus(callback) {
+  ensureConnection();
+  statusListeners.add(callback);
+  callback(connectionStatus); // Notificar estado actual inmediatamente
+  return () => statusListeners.delete(callback);
+}
+
+export function getRealtimeStatus() {
+  return connectionStatus;
 }
