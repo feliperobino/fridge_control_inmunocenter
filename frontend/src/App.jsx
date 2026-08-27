@@ -27,6 +27,9 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<ProtectedRoute />}>
+        {/* Ruta directa para Kiosk sin Layout alrededor */}
+        <Route path="/dashboard/kiosk" element={<DashboardPage isKiosk={true} />} />
+
         <Route element={<Layout />}>
           <Route path="/dashboard" element={<DashboardPage />} />
           <Route path="/fridges/:id" element={<FridgeDetailPage />} />

@@ -159,6 +159,139 @@ button,input,select,textarea{font:inherit}
 .route-state{color:var(--muted)}
 .placeholder-page{display:grid;place-items:center;padding:24px}
 
+/* Estilos para Modo Fullscreen / Kiosk */
+.dashboard-controls-bar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 12px;
+}
+
+.kiosk-mode-active {
+  padding: 16px;
+  background-color: #0f172a;
+  min-height: 100vh;
+  color: #f8fafc;
+}
+
+.kiosk-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 20px;
+  width: 100%;
+}
+
+.fridge-tile {
+  background: #1e293b;
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border: 2px solid #334155;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+}
+
+.fridge-tile.kiosk-ok {
+  border-color: #22c55e;
+}
+
+.fridge-tile.kiosk-alert {
+  border-color: #ef4444;
+  background-color: #2c0f14;
+  animation: pulse-alert 2s infinite;
+}
+
+@keyframes pulse-alert {
+  0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  70% { box-shadow: 0 0 0 12px rgba(239, 68, 68, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+.kiosk-tile-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kiosk-location {
+  font-size: 0.85rem;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.kiosk-name {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.kiosk-badge {
+  align-self: flex-start;
+  margin-top: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.kiosk-badge.kiosk-ok {
+  background-color: #15803d;
+  color: #dcfce7;
+}
+
+.kiosk-badge.kiosk-alert {
+  background-color: #b91c1c;
+  color: #fee2e2;
+}
+
+.kiosk-badge.kiosk-neutral {
+  background-color: #475569;
+  color: #f1f5f9;
+}
+
+.kiosk-tile-metrics {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.kiosk-metric {
+  display: flex;
+  flex-direction: column;
+}
+
+.kiosk-metric-label {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.kiosk-metric-value {
+  font-size: 2.25rem;
+  font-weight: 800;
+  color: #ffffff;
+  line-height: 1.1;
+  margin: 4px 0;
+}
+
+.kiosk-range-hint {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.kiosk-tile-footer {
+  border-top: 1px solid #334155;
+  padding-top: 12px;
+  font-size: 0.8rem;
+  color: #94a3b8;
+}
+
+
+
 @keyframes fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 
 @media(max-width:640px){.fridge-grid{grid-template-columns:1fr}.fridge-meta{grid-template-columns:1fr}}
