@@ -3,9 +3,10 @@ import prisma from '../config/prisma.js';
 
 import {
   exportReadingsToCsv,
-  exportReadingsToPdf,
-  exportReadingsToXlsx
+  exportReadingsToXlsx,
+  exportMonthlyPdfReport
 } from './export.service.js';
+import { getMonthlyReportData } from './reports.service.js';
 import { sendReportEmail } from './mailer.service.js';
 
 // HARDCODED TIMEZONE FOR CHILE
@@ -47,7 +48,6 @@ function getRangeForCronExpression(cronExpression, now = new Date()) {
   }
 
   if (isDaily(parts)) {
-    // Calculado en hora local en lugar de UTC
     const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const from = new Date(end);
     from.setDate(from.getDate() - 1);
@@ -64,20 +64,21 @@ function getLast24HoursRange(now = new Date()) {
   return { from, to };
 }
 
-function getExportFunction(format) {
-  if (format === 'XLSX') {
-    return exportReadingsToXlsx;
-  }
-
-  if (format === 'PDF') {
-    return exportReadingsToPdf;
-  }
-
-  return exportReadingsToCsv;
-}
-
 async function buildAttachment(schedule, from, to) {
-  const exportFn = getExportFunction(schedule.format);
+  // Si el reporte programado es de formato PDF, genera el nuevo Reporte Mensual PDF de 2 páginas
+  if (schedule.format === 'PDF') {
+    const reportData = await getMonthlyReportData(to);
+    const { buffer, filename, contentType } = await exportMonthlyPdfReport(reportData);
+
+    return {
+      filename,
+      content: buffer,
+      contentType
+    };
+  }
+
+  // Para CSV o XLSX mantiene la exportación de lecturas según el rango seleccionado
+  const exportFn = schedule.format === 'XLSX' ? exportReadingsToXlsx : exportReadingsToCsv;
   const result = await exportFn('all', from.toISOString(), to.toISOString(), {
     fridgeIds: schedule.fridgeIds
   });
@@ -100,7 +101,7 @@ export async function executeReportSchedule(schedule, now = new Date()) {
   await sendReportEmail({
     to: schedule.recipients,
     subject: `Reporte ${schedule.name}`,
-    text: `Reporte programado ${schedule.name} (${from.toISOString()} - ${to.toISOString()})`,
+    text: `Adjunto encontrará el reporte programado: ${schedule.name}`,
     attachments: [attachment]
   });
 

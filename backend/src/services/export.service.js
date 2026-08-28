@@ -2,6 +2,13 @@ import ExcelJS from 'exceljs';
 import PDFDocument from 'pdfkit';
 import prisma from '../config/prisma.js';
 
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const PDF_SUMMARY_THRESHOLD = 500;
 
 function parseDate(value) {
@@ -322,6 +329,241 @@ export async function exportReadingsToPdf(fridgeId, from, to, options = {}) {
     startDate,
     endDate,
     filename: `${fridgeId && fridgeId !== 'all' ? 'refrigerador' : 'all-fridges'}_${formatFileDate(startDate)}_${formatFileDate(endDate)}.pdf`,
+    contentType: 'application/pdf'
+  };
+}
+
+
+async function fetchChartBuffer(labels, maxSeries, minSeries, avgSeries, title, unit, isTemperature = true, limits = { min: 2, max: 8 }) {
+  const chartConfig = {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Max',
+          borderColor: '#ef4444',
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 1,
+          data: maxSeries
+        },
+        {
+          label: 'Prom',
+          borderColor: isTemperature ? '#2563eb' : '#0d9488',
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 2,
+          data: avgSeries
+        },
+        {
+          label: 'Min',
+          borderColor: '#3b82f6',
+          borderWidth: 1.5,
+          fill: false,
+          pointRadius: 1,
+          data: minSeries
+        }
+      ]
+    },
+    options: {
+      title: { display: true, text: title, fontSize: 10 },
+      legend: { display: true, position: 'bottom', labels: { boxWidth: 10, fontSize: 8 } },
+      scales: {
+        xAxes: [{ ticks: { fontSize: 7, maxRotation: 45 } }],
+        yAxes: [{ ticks: { fontSize: 8, callback: (val) => `${val}${unit}` } }]
+      }
+    }
+  };
+
+  const url = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=350&h=180&bkg=white`;
+
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const arrayBuffer = await res.arrayBuffer();
+      return Buffer.from(arrayBuffer);
+    }
+  } catch (err) {
+    // Si falla QuickChart, continúa sin la imagen (fallback vectorial)
+  }
+  return null;
+}
+
+/**
+ * Renderiza el encabezado común para las páginas 1 y 2
+ */
+function renderHeader(doc, metadata, logoPath) {
+  // Intentar cargar logo si existe
+  if (fs.existsSync(logoPath)) {
+    try {
+      doc.image(logoPath, 40, 30, { width: 120 });
+    } catch (e) {
+      // Fallback si la imagen está corrupta o falla
+      doc.fontSize(16).fillColor('#08111f').text('INMUNOCENTER', 40, 35);
+    }
+  } else {
+    doc.fontSize(16).fillColor('#08111f').text('INMUNOCENTER', 40, 35);
+  }
+
+  doc.fontSize(12).fillColor('#08111f').text(metadata.title, 180, 30, { width: 375, align: 'right' });
+  doc.fontSize(9).fillColor('#64748b').text(metadata.subtitle, 180, 48, { width: 375, align: 'right' });
+  doc.fontSize(8).fillColor('#64748b').text(`Período: ${metadata.period} | Generado: ${metadata.generatedAt}`, 180, 62, { width: 375, align: 'right' });
+
+  doc.moveTo(40, 78).lineTo(555, 78).strokeColor('#cbd5e1').lineWidth(1).stroke();
+}
+
+/**
+ * Dibujar la tabla estadística al pie de cada página
+ */
+function renderStatsTable(doc, fridgesData, metricType, startY) {
+  const isTemp = metricType === 'temperature';
+  const unit = isTemp ? '°C' : '%';
+  const title = isTemp ? 'Estadísticas Globales de Temperatura (30 Días)' : 'Estadísticas Globales de Humedad (30 Días)';
+
+  doc.fontSize(10).fillColor('#0f172a').text(title, 40, startY);
+
+  const headers = ['Refrigerador', 'Tiempo Fuera Rango', `Prom. Global ± σ²`, 'Lecturas (% Uptime)', `Extremas (${unit})`];
+  const colWidths = [140, 100, 105, 90, 80];
+  let cursorY = startY + 14;
+
+  // Header Row
+  let cursorX = 40;
+  headers.forEach((h, idx) => {
+    const w = colWidths[idx];
+    doc.rect(cursorX, cursorY, w, 18).fillAndStroke('#f1f5f9', '#cbd5e1');
+    doc.fillColor('#0f172a').fontSize(8).text(h, cursorX + 4, cursorY + 5, { width: w - 8, align: 'left' });
+    cursorX += w;
+  });
+
+  cursorY += 18;
+
+  // Data Rows
+  fridgesData.forEach((fridge) => {
+    const stats = isTemp ? fridge.statsTemp : fridge.statsRH;
+    const cells = [
+      fridge.label,
+      stats.outOfRangeHoursPerDay,
+      `${stats.globalAvg}${unit} ± ${stats.variance}`,
+      `${stats.totalReadings} (${stats.uptimePercentage}%)`,
+      `${stats.absoluteMin} / ${stats.absoluteMax} ${unit}`
+    ];
+
+    cursorX = 40;
+    cells.forEach((cell, idx) => {
+      const w = colWidths[idx];
+      doc.rect(cursorX, cursorY, w, 16).strokeColor('#e2e8f0').stroke();
+      doc.fillColor('#334155').fontSize(7.5).text(cell, cursorX + 4, cursorY + 4, { width: w - 8, align: 'left' });
+      cursorX += w;
+    });
+
+    cursorY += 16;
+  });
+}
+
+/**
+ * Genera y exporta el reporte mensual en PDF (Exactamente 2 páginas)
+ */
+export async function exportMonthlyPdfReport(reportData) {
+  const doc = new PDFDocument({ margin: 40, size: 'LETTER', autoFirstPage: true });
+  const chunks = [];
+
+  const bufferPromise = new Promise((resolve, reject) => {
+    doc.on('data', (chunk) => chunks.push(chunk));
+    doc.on('end', () => resolve(Buffer.concat(chunks)));
+    doc.on('error', reject);
+  });
+
+  const logoPath = path.join(__dirname, '../../assets/logo.png');
+  const labels = reportData.fridgesData[0]?.dailySeries.map((d) => d.date.slice(5)) || [];
+
+  // =========================================================================
+  // PÁGINA 1: TEMPERATURA (30 DÍAS)
+  // =========================================================================
+  renderHeader(doc, reportData.metadata, logoPath);
+  doc.fontSize(11).fillColor('#1e293b').text('Monitoreo Mensual de Temperatura (°C)', 40, 86);
+
+  // Renderizar Grilla 2x2 de gráficos (4 posiciones fijas)
+  const gridPositions = [
+    { x: 40, y: 102 },
+    { x: 300, y: 102 },
+    { x: 40, y: 292 },
+    { x: 300, y: 292 }
+  ];
+
+  for (let i = 0; i < Math.min(reportData.fridgesData.length, 4); i++) {
+    const fridge = reportData.fridgesData[i];
+    const pos = gridPositions[i];
+    const maxSeries = fridge.dailySeries.map((s) => s.tempMax);
+    const minSeries = fridge.dailySeries.map((s) => s.tempMin);
+    const avgSeries = fridge.dailySeries.map((s) => s.tempAvg);
+
+    const imgBuffer = await fetchChartBuffer(
+      labels,
+      maxSeries,
+      minSeries,
+      avgSeries,
+      fridge.label,
+      '°C',
+      true,
+      fridge.tempLimits
+    );
+
+    if (imgBuffer) {
+      doc.image(imgBuffer, pos.x, pos.y, { width: 250, height: 170 });
+    } else {
+      // Fallback en cuadro vectorial si no hay conexión
+      doc.rect(pos.x, pos.y, 250, 170).strokeColor('#cbd5e1').stroke();
+      doc.fontSize(9).fillColor('#64748b').text(fridge.label, pos.x + 10, pos.y + 10);
+    }
+  }
+
+  // Tabla Estadística al pie de Página 1
+  renderStatsTable(doc, reportData.fridgesData, 'temperature', 485);
+
+  // =========================================================================
+  // PÁGINA 2: HUMEDAD RELATIVA (30 DÍAS)
+  // =========================================================================
+  doc.addPage({ margin: 40, size: 'LETTER' });
+
+  renderHeader(doc, reportData.metadata, logoPath);
+  doc.fontSize(11).fillColor('#1e293b').text('Monitoreo Mensual de Humedad Relativa (%RH)', 40, 86);
+
+  for (let i = 0; i < Math.min(reportData.fridgesData.length, 4); i++) {
+    const fridge = reportData.fridgesData[i];
+    const pos = gridPositions[i];
+    const maxSeries = fridge.dailySeries.map((s) => s.rhMax);
+    const minSeries = fridge.dailySeries.map((s) => s.rhMin);
+    const avgSeries = fridge.dailySeries.map((s) => s.rhAvg);
+
+    const imgBuffer = await fetchChartBuffer(
+      labels,
+      maxSeries,
+      minSeries,
+      avgSeries,
+      fridge.label,
+      '%',
+      false,
+      fridge.rhLimits
+    );
+
+    if (imgBuffer) {
+      doc.image(imgBuffer, pos.x, pos.y, { width: 250, height: 170 });
+    } else {
+      doc.rect(pos.x, pos.y, 250, 170).strokeColor('#cbd5e1').stroke();
+      doc.fontSize(9).fillColor('#64748b').text(fridge.label, pos.x + 10, pos.y + 10);
+    }
+  }
+
+  // Tabla Estadística al pie de Página 2
+  renderStatsTable(doc, reportData.fridgesData, 'humidity', 485);
+
+  doc.end();
+
+  const buffer = await bufferPromise;
+  return {
+    buffer,
+    filename: `Reporte_Mensual_Inmunocenter_${reportData.metadata.period.replace(/\//g, '-').replace(/\s/g, '')}.pdf`,
     contentType: 'application/pdf'
   };
 }

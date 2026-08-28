@@ -24,7 +24,7 @@ const initialForm = {
   dayOfWeek: '1',
   dayOfMonth: '1',
   cronExpression: '0 8 * * *',
-  format: 'CSV',
+  format: 'PDF', // Por defecto PDF (Reporte Base)
   fridgeIds: [],
   recipients: '',
   active: true
@@ -239,9 +239,22 @@ export default function ReportsPage() {
   return (
     <section className="page-stack">
       <div className="page-heading">
-        <span className="brand-kicker">Reportes</span>
-        <h2>Schedules programados</h2>
-        <p>Administrá los envíos automáticos de reportes por correo electrónico.</p>
+        <span className="brand-kicker">Reportes Institucionales y Programados</span>
+        <h2>Gestión de Reportes</h2>
+        <p>Configurá envíos automáticos del Reporte Base de 30 días o exportaciones personalizadas de datos.</p>
+      </div>
+
+      {/* TARJETA INFORMATIVA: REPORTE BASE INSTITUCIONAL */}
+      <div className="card-shell" style={{ borderLeft: '4px solid #2563eb', backgroundColor: '#f8fafc' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <span className="brand-kicker" style={{ color: '#2563eb' }}>Estándar Inmunocenter</span>
+            <h3 style={{ margin: '4px 0 8px 0' }}>📄 Reporte Base (PDF Integrado 30 Días)</h3>
+            <p style={{ margin: 0, color: '#475569', fontSize: '0.9rem' }}>
+              Documento institucional estricto de <strong>2 páginas</strong>. Incluye grilla 2x2 de gráficos diarios de temperatura (Pág 1) y humedad (Pág 2), junto con las tablas estadísticas de promedio global, varianza y % uptime de todos los equipos.
+            </p>
+          </div>
+        </div>
       </div>
 
       {isLoading ? <div className="route-state">Cargando schedules...</div> : null}
@@ -253,7 +266,7 @@ export default function ReportsPage() {
           <div className="card-shell">
             <div className="section-heading">
               <div>
-                <span className="brand-kicker">Formulario</span>
+                <span className="brand-kicker">Configuración</span>
                 <h3>{editingId ? 'Editar programación' : 'Crear nueva programación'}</h3>
               </div>
             </div>
@@ -265,13 +278,29 @@ export default function ReportsPage() {
                   type="text"
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
-                  placeholder="Ej: Reporte Diario de Temperatura"
+                  placeholder="Ej: Reporte Mensual Inmunocenter"
                   required
                 />
               </label>
 
-              {/* SELECTOR VISUAL DE FRECUENCIA Y HORARIO */}
+              {/* TIPO Y FORMATO DE REPORTE */}
               <div className="admin-grid">
+                <label>
+                  Tipo / Formato de Reporte
+                  <select
+                    value={form.format}
+                    onChange={(event) => setForm((current) => ({ ...current, format: event.target.value }))}
+                  >
+                    <optgroup label="Reporte Base Institucional">
+                      <option value="PDF">📄 PDF - Reporte Base (30 Días / 2 Páginas)</option>
+                    </optgroup>
+                    <optgroup label="Reporte Personalizado de Datos">
+                      <option value="CSV">📊 CSV - Datos Crudos</option>
+                      <option value="XLSX">📈 Excel (.xlsx) - Planilla Tabular</option>
+                    </optgroup>
+                  </select>
+                </label>
+
                 <label>
                   Frecuencia de envío
                   <select
@@ -284,7 +313,10 @@ export default function ReportsPage() {
                     <option value="CUSTOM">Personalizado (Sintaxis Cron)</option>
                   </select>
                 </label>
+              </div>
 
+              {/* SELECTOR VISUAL DE HORARIO */}
+              <div className="admin-grid">
                 {form.frequencyType !== 'CUSTOM' ? (
                   <label>
                     Hora de envío
@@ -307,6 +339,17 @@ export default function ReportsPage() {
                     />
                   </label>
                 )}
+
+                <label>
+                  Destinatarios (separados por coma)
+                  <input
+                    type="text"
+                    value={form.recipients}
+                    onChange={(event) => setForm((current) => ({ ...current, recipients: event.target.value }))}
+                    placeholder="calidad@inmunocenter.cl, direccion@inmunocenter.cl"
+                    required
+                  />
+                </label>
               </div>
 
               {/* OPCIONES ADICIONALES SEGÚN FRECUENCIA */}
@@ -345,68 +388,54 @@ export default function ReportsPage() {
               {/* RESUMEN DE LA PROGRAMACIÓN RESULTANTE */}
               <div className="cron-preview-badge">
                 <strong>Resumen:</strong> {describeCron(buildCronExpression(form))}
+                {form.format === 'PDF' && (
+                  <span style={{ marginLeft: '10px', color: '#2563eb' }}>
+                    • Adjuntará el Reporte Base PDF de 30 días.
+                  </span>
+                )}
               </div>
 
-              <div className="admin-grid">
-                <label>
-                  Formato del archivo
-                  <select
-                    value={form.format}
-                    onChange={(event) => setForm((current) => ({ ...current, format: event.target.value }))}
-                  >
-                    <option value="CSV">CSV</option>
-                    <option value="XLSX">Excel (.xlsx)</option>
-                    <option value="PDF">PDF</option>
-                  </select>
-                </label>
+              {/* SELECTOR DE REFRIGERADORES (Solo aplica para datos personalizados CSV/XLSX) */}
+              {form.format !== 'PDF' ? (
+                <div className="fridge-checkbox-section">
+                  <div className="fridge-checkbox-header">
+                    <span>Refrigeradores a incluir ({form.fridgeIds.length} seleccionados)</span>
+                    <label className="checkbox-field-inline">
+                      <input
+                        type="checkbox"
+                        checked={allFridgesSelected}
+                        onChange={handleToggleAllFridges}
+                      />
+                      <strong>
+                        {allFridgesSelected ? 'Desmarcar todos' : 'Incluir todos los refrigeradores'}
+                      </strong>
+                    </label>
+                  </div>
 
-                <label>
-                  Destinatarios (separados por coma)
-                  <input
-                    type="text"
-                    value={form.recipients}
-                    onChange={(event) => setForm((current) => ({ ...current, recipients: event.target.value }))}
-                    placeholder="ops@empresa.com, qa@empresa.com"
-                    required
-                  />
-                </label>
-              </div>
-
-              {/* SELECTOR LIMPIO CON CHECKBOXES */}
-              <div className="fridge-checkbox-section">
-                <div className="fridge-checkbox-header">
-                  <span>Refrigeradores a incluir ({form.fridgeIds.length} seleccionados)</span>
-                  <label className="checkbox-field-inline">
-                    <input
-                      type="checkbox"
-                      checked={allFridgesSelected}
-                      onChange={handleToggleAllFridges}
-                    />
-                    <strong>
-                      {allFridgesSelected ? 'Desmarcar todos' : 'Incluir todos los refrigeradores'}
-                    </strong>
-                  </label>
+                  <div className="fridge-checkbox-list">
+                    {fridges.map((fridge) => {
+                      const isChecked = form.fridgeIds.includes(fridge.id);
+                      return (
+                        <label key={fridge.id} className={`fridge-checkbox-card ${isChecked ? 'selected' : ''}`}>
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleToggleFridge(fridge.id)}
+                          />
+                          <div className="fridge-checkbox-info">
+                            <span className="fridge-name">{fridge.name}</span>
+                            <span className="fridge-sub">{fridge.location || `Slave ${fridge.modbusSlaveId}`}</span>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                <div className="fridge-checkbox-list">
-                  {fridges.map((fridge) => {
-                    const isChecked = form.fridgeIds.includes(fridge.id);
-                    return (
-                      <label key={fridge.id} className={`fridge-checkbox-card ${isChecked ? 'selected' : ''}`}>
-                        <input
-                          type="checkbox"
-                          checked={isChecked}
-                          onChange={() => handleToggleFridge(fridge.id)}
-                        />
-                        <div className="fridge-checkbox-info">
-                          <span className="fridge-name">{fridge.name}</span>
-                          <span className="fridge-sub">{fridge.location || `Slave ${fridge.modbusSlaveId}`}</span>
-                        </div>
-                      </label>
-                    );
-                  })}
+              ) : (
+                <div style={{ padding: '12px', backgroundColor: '#e0f2fe', borderRadius: '6px', fontSize: '0.85rem', color: '#0369a1' }}>
+                  ℹ️ <strong>Nota del Reporte Base:</strong> El informe en PDF consolida automáticamente el 100% de los refrigeradores activos del laboratorio para asegurar el cumplimiento normativo.
                 </div>
-              </div>
+              )}
 
               <label className="checkbox-field">
                 <input
@@ -448,7 +477,7 @@ export default function ReportsPage() {
                         🕒 {describeCron(schedule.cronExpression)}
                       </small>
                       <small>
-                        Formato: {schedule.format} · Estado: {schedule.active ? 'Activo' : 'Inactivo'}
+                        Tipo: {schedule.format === 'PDF' ? '📄 Reporte Base PDF (30 Días)' : `📊 Reporte Personalizado (${schedule.format})`} · Estado: {schedule.active ? 'Activo' : 'Inactivo'}
                       </small>
                       <small>✉️ {schedule.recipients?.join(', ')}</small>
                     </div>

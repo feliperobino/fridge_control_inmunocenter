@@ -10,6 +10,7 @@ import eventsRoutes from './routes/events.route.js';
 import systemHealthRoutes from './routes/system-health.routes.js'; // <-- Importado
 import helmet from 'helmet';
 import { errorHandlerMiddleware } from './middlewares/error-handler.middleware.js';
+import reportsRoutes from './routes/reports.routes.js';
 
 const app = express();
 
@@ -27,8 +28,9 @@ app.use('/api/fridges', fridgesRoutes);
 app.use('/api/alarms', alarmsRoutes);
 app.use('/api/exports', exportsRoutes);
 app.use('/api/report-schedules', reportSchedulesRoutes);
-app.use('/api/admin', systemHealthRoutes); // <-- Agregado
+app.use('/api/admin', systemHealthRoutes);
 app.use('/api', eventsRoutes);
+app.use('/api/reports', reportsRoutes);
 
 app.use(errorHandlerMiddleware);
 
