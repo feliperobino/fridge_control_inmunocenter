@@ -244,87 +244,65 @@ Este proyecto se construye siguiendo `PROMPTS.md` — una serie ordenada de prom
 agente de IA (VSCode Agent / Claude Code), fase por fase, cada una verificable antes de
 avanzar a la siguiente. Ver `CLAUDE.md` para el contexto persistente que el agente debe
 respetar en todas las fases.
+## 🚀 Cambios Recientes (Revamps Implementados)
 
-## Roadmap / próximos pasos
+### 1. Sistema de Reportes Programados (Revamp #2)
+* **Formulario Visual de Cronjobs (Sin sintaxis manual):**
+  * Configuración intuitiva de frecuencia (Diaria, Semanal, Mensual) y selección directa de hora/día.
+  * Traductor dinámico a expresiones CRON de 5 campos en tiempo real (`0 8 * * *`).
+  * Modo **Avanzado / Personalizado** mantenido para usuarios experimentados.
+* **Decodificador en Lenguaje Natural:**
+  * Traducción automática de expresiones CRON en la tabla de listado (e.g., *"Todos los Lunes a las 09:30"* o *"Todos los días a las 08:00"*).
+* **Selector Visual de Refrigeradores (Checkboxes):**
+  * Sustitución del `<select multiple>` por tarjetas interactivas de verificación individual.
+  * Botón global de acción rápida para **"Incluir todos / Desmarcar todos"** los equipos con un solo clic.
 
-Cambios planeados, en orden de prioridad sugerido. Ninguno está implementado
-todavía — se documentan acá para que la siguiente fase de `PROMPTS.md` los
-retome con contexto.
+---
 
-### 1. Modo fullscreen del dashboard
+## 📋 Próximos Proyectos
 
-Un botón que colapse el `Layout` (sidebar, header de sesión) y muestre
-únicamente la grilla de `FridgeCard` en su estado actual — pensado para dejarlo
-proyectado en una pantalla fija de sala de servidores/bodega, sin navegación.
+### Proyecto 1: Fix & Revamp de Gráficos de Detalle por Refrigerador
 
-Enfoque sugerido:
-- Un `?fullscreen=1` en la ruta de `DashboardPage`, o un estado local +
-  `document.documentElement.requestFullscreen()` para usar el fullscreen nativo
-  del navegador.
-- En modo fullscreen, ocultar `Layout` completo y renderizar una variante
-  "reducida" de `FridgeCard` (o un nuevo `FridgeTile`) que muestre solo
-  temperatura, humedad y estado — sin edición de nombre, sin navegación de
-  días, sin botones. Evitar bifurcar toda la lógica de `FridgeCard`: extraer
-  primero la parte de "estado actual" a un subcomponente compartido.
-- Salir de fullscreen con `Esc` (ya lo maneja el navegador) y con un botón
-  visible al hacer hover/tap.
-- Considerar auto-activar este modo vía una ruta dedicada (`/dashboard/kiosk`)
-  para que se pueda dejar abierta directamente en una Smart TV o mini-PC sin
-  pasar por un clic manual cada vez que se reinicia el dispositivo.
+#### 1. Objetivos del Fix y Mejoras
+* **Ventana de Tiempo Escada & Unidades Claras:**
+  * Eje horizontal ($X$) configurado dinámicamente con unidades explícitas en horas (e.g., `Últimas 6h`, `12h`, `24h`, `48h`).
+  * Marcas de tiempo (*timestamps*) formateadas de manera legible y proporcional al intervalo seleccionado.
+* **Límites y Dimensiones Fijas en Eje Y:**
+  * Escala del eje vertical ($Y$) fijada con márgenes de tolerancia (*padding* superior e inferior) para evitar saltos repentinos de escala al actualizar datos.
+* **Visualización Visual de Rangos y Umbrales Fuera de Control:**
+  * Sombreado de área / bandas de tolerancia visuales indicando el rango óptimo por variable (Temperatura, Humedad, etc.).
+  * Resaltado automático en color diferenciado (rojo/alerta) cuando una variable sale del rango permitido, mostrando claramente **cuándo y durante cuánto tiempo** ocurrió la excursión.
+* **Auditoría e Investigación de Datos Constantes:**
+  * Diagnóstico y corrección del flujo de datos en Frontend/Backend/Modbus ante la presencia de lecturas planas/constantes incoherentes frente al comportamiento real del equipo.
 
-### 2. Revamp de Reportes/Cronjobs (drag-and-drop, sin sintaxis cron)
+#### 2. Componentes y Capas Involucradas
+* `frontend/src/pages/FridgeDetailPage.jsx` (o componentes de gráficos asociados tipo Chart.js / Recharts).
+* `backend/src/services/telemetryService.js` (Revisión de la consulta y mapeo de lecturas).
+* Modbus/Poller Worker (Verificación del ciclo de refresco e ingesta de datos en DB).
 
-Reemplazar el formulario actual de `ReportSchedule` (que expone `cronExpression`
-en crudo) por un builder visual. Nadie debería tener que escribir `0 8 * * 1`
-a mano.
+---
 
-Enfoque sugerido:
-- Librería de cron visual (ej. `react-js-cron` o equivalente) para traducir
-  clics ("todos los lunes a las 8am") a la expresión cron internamente — el
-  backend (`report-scheduler.service.js`, basado en `node-cron`) no cambia,
-  solo cambia cómo se genera el string.
-- Selección de refrigeradores (`fridgeIds`) y destinatarios (`recipients`) como
-  chips arrastrables/reordenables en vez de inputs de texto separados por coma
-  — `dnd-kit` es liviano y no requiere backend.
-- Selector de formato (`CSV`/`XLSX`/`PDF`) como tarjetas grandes con ícono en
-  vez de `<select>`.
-- Vista previa en lenguaje natural del schedule antes de guardar ("Cada lunes
-  a las 08:00, envía PDF de Bodega 1 y Bodega 2 a sistemas@inmunocenter.cl").
-- No requiere cambios de esquema en `ReportSchedule` — es 100% una capa de UI
-  sobre el modelo que ya existe.
+### Proyecto 2: Gestión y Limpieza UI basada en Roles (RBAC)
 
-### 3. Mejorar la confiabilidad del realtime
+#### 1. Objetivos del Fix y Mejoras
+* **Filtrado Silencioso de Navegación y Vistas:**
+  * Eliminación de elementos de la barra de navegación, menús laterales, botones o páginas completas a los que el usuario no tenga permisos de acceso.
+  * Reemplazar los mensajes de error/bloqueo tipo `403 Forbidden` en la interfaz por un filtrado proactivo a nivel de UI: si el usuario no tiene acceso, el elemento **simplemente no existe ni se despliega**.
+* **Condicionales Guard Centralizados:**
+  * Abstracción de un helper/hook de verificación de roles (`useAuth` / `hasPermission`) para renderizar componentes de forma limpia y mantenible.
 
-El SSE implementado en esta fase cubre el caso feliz, pero tiene puntos
-frágiles que conviene resolver antes de depender de él en producción sin red
-de respaldo:
+#### 2. Componentes e Interfaces Involucradas
+* `frontend/src/components/Navbar.jsx` / `Sidebar.jsx` (Filtrado de ítems de navegación según rol).
+* `frontend/src/routes/AppRoutes.jsx` (Redirección limpia de rutas no autorizadas sin renderizar componentes vacíos).
+* `frontend/src/context/AuthContext.jsx` (Manejo de permisos y perfil de usuario activo).
 
-- **Sin fallback si el SSE se cae:** si `EventSource` pierde la conexión (red
-  inestable, proxy que corta conexiones idle, restart del backend) y no
-  reconecta a tiempo, el dashboard queda "congelado" sin avisar. Agregar un
-  **polling de respaldo** (ej. cada 30–60s, independiente del SSE) que
-  refresque igual, para que el peor caso sea "un poco más lento", no "roto".
-- **Sin indicador de estado de conexión:** el usuario no tiene forma de saber
-  si el dashboard está actualizándose en vivo o quedó desconectado. Agregar un
-  indicador visual (punto verde/gris) basado en los eventos `onopen`/`onerror`
-  de `EventSource`.
-- **Sin autenticación en `/api/events`** (ver nota de seguridad arriba). Si se
-  quiere cerrar esto, la opción estándar para SSE es pasar el JWT como query
-  param (`/api/events?token=...`) y validarlo a mano en el route handler, ya
-  que el header `Authorization` no es una opción con `EventSource`.
-- **No sobrevive a múltiples instancias del backend:** el bus de eventos es un
-  `EventEmitter` en memoria de un solo proceso. Si en algún momento se escala
-  el backend a más de un container, cada instancia tendría su propia copia del
-  bus y los clientes conectados a una instancia no verían los eventos
-  emitidos por otra. Requeriría migrar a Redis pub-sub (`realtimeBus` pasaría
-  a publicar/suscribirse vía Redis en vez de `EventEmitter` nativo) — mismo
-  cambio que ya se anticipó para `reading_buffer.service.js` si se escala
-  horizontalmente.
-- **Reconexión sin backoff:** `EventSource` reconecta solo, pero sin control
-  sobre el intervalo. Si el backend está caído por un rato largo, vale la pena
-  un backoff exponencial manual en `realtime.js` en vez de dejarlo al default
-  del navegador.
+---
 
+## 🛠️ Tecnologías Empleadas
+
+* **Frontend:** React, React Router, CSS3 (CSS Modules / Custom Properties).
+* **Backend:** Node.js, Express, Cron Runner.
+* **Persistencia & Datos:** Base de datos relacional / Integración Modbus RTU/TCP.
 ## Licencia
 
 Uso interno / privado.
