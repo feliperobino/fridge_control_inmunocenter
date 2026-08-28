@@ -464,12 +464,12 @@ aviso temprano en vez de descubrir el problema cuando el `INSERT` ya está falla
 
 ### 5. Resumen de prioridad de implementación
 
-| # | Ítem | Prioridad | Por qué |
-|---|------|-----------|---------|
-| 2 | Rotación de logs de Docker | **Alta** | Es el riesgo de espacio más inmediato y silencioso; un bug de logging en loop puede llenar el disco en horas, no en años. |
-| 4 | Monitoreo/alerta de disco | **Alta** | Red de seguridad barata que cubre errores en cualquiera de los otros puntos. |
-| 3 | Pruning de imágenes Docker | Media | Se acumula con cada deploy, pero a un ritmo lento y predecible. |
-| 1 | Retención de `Reading` | Media | Al ritmo actual (~5 GB/año) da ~2 años de margen; no es urgente, pero sí conviene resolverlo con tiempo y con la política de archivado definida, no de apuro. |
+| # | Ítem                        | Prioridad | Por qué                                                                                                                         |
+|---|-----------------------------|-----------|---------------------------------------------------------------------------------------------------------------------------------|
+| 2 | Rotación de logs de Docker  | **Alta**  | Es el riesgo de espacio más inmediato y silencioso; un bug de logging en loop puede llenar el disco en horas, no en años.       |
+| 4 | Monitoreo/alerta de disco   | **Alta**  | Red de seguridad barata que cubre errores en cualquiera de los otros puntos.                                                    |
+| 3 | Pruning de imágenes Docker  | Media     | Se acumula con cada deploy, pero a un ritmo lento y predecible.                                                                 | 
+| 1 | Retención de `Reading`      | Media     | Al ritmo actual (~5 GB/año) da ~2 años de margen; no es urgente, resolverlo con tiempo y con la política de archivado definida. |
 
 No implementar nada de esto todavía es una opción válida a corto plazo — el disco
 no está en riesgo inminente — pero **los puntos 2 y 4 son de bajo costo/alto
