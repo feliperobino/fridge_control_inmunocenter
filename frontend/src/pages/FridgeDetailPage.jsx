@@ -22,6 +22,16 @@ function getDayRange(dateString) {
   };
 }
 
+function formatDuration(minutes) {
+  if (minutes <= 0) return '0m';
+  const hrs = Math.floor(minutes / 60);
+  const mins = Math.round(minutes % 60);
+  if (hrs > 0) {
+    return `${hrs}h ${mins}m`;
+  }
+  return `${mins}m`;
+}
+
 export default function FridgeDetailPage() {
   const { id } = useParams();
   const { user } = useAuth();
@@ -30,7 +40,6 @@ export default function FridgeDetailPage() {
   const [stats, setStats] = useState(null);
   const [alarms, setAlarms] = useState([]);
   
-  // Por defecto el día de hoy
   const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().slice(0, 10));
   const selectedRange = useMemo(() => getDayRange(selectedDay), [selectedDay]);
 
@@ -51,6 +60,65 @@ export default function FridgeDetailPage() {
   const isToday = useMemo(() => {
     return selectedDay === new Date().toISOString().slice(0, 10);
   }, [selectedDay]);
+
+  // Cálculos de Time in Range y Última Lectura
+  const analytics = useMemo(() => {
+    if (!readings || readings.length === 0 || !fridge) {
+      return {
+        tempInPercent: '--',
+        tempOutTime: '--',
+        humInPercent: '--',
+        humOutTime: '--',
+        lastReadingTime: '--'
+      };
+    }
+
+    const tempMin = Number(fridge.tempMin);
+    const tempMax = Number(fridge.tempMax);
+    const humMin = Number(fridge.humMin);
+    const humMax = Number(fridge.humMax);
+
+    let tempInCount = 0;
+    let humInCount = 0;
+
+    readings.forEach((r) => {
+      if (r.temperature >= tempMin && r.temperature <= tempMax) {
+        tempInCount++;
+      }
+      if (r.humidity >= humMin && r.humidity <= humMax) {
+        humInCount++;
+      }
+    });
+
+    const total = readings.length;
+    const tempInPercent = ((tempInCount / total) * 100).toFixed(1);
+    const humInPercent = ((humInCount / total) * 100).toFixed(1);
+
+    // Estimación del tiempo fuera basado en la franja activa (24h)
+    const minutesPerReading = (24 * 60) / total;
+    const tempOutMinutes = (total - tempInCount) * minutesPerReading;
+    const humOutMinutes = (total - humInCount) * minutesPerReading;
+
+    // Obtener la hora del último registro cronológico
+    const sorted = [...readings].sort(
+      (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+    );
+    const lastDate = new Date(sorted[sorted.length - 1].recordedAt);
+    const lastReadingTime = new Intl.DateTimeFormat('es-CL', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false
+    }).format(lastDate);
+
+    return {
+      tempInPercent: `${tempInPercent}%`,
+      tempOutTime: formatDuration(tempOutMinutes),
+      humInPercent: `${humInPercent}%`,
+      humOutTime: formatDuration(humOutMinutes),
+      lastReadingTime
+    };
+  }, [readings, fridge]);
 
   function handlePrevDay() {
     const current = new Date(selectedDay + 'T00:00:00');
@@ -189,7 +257,6 @@ export default function FridgeDetailPage() {
         </div>
       </div>
 
-      {/* Navegador Seamless por días */}
       <div className="range-controls card-shell" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         <button className="button button-secondary" type="button" onClick={handlePrevDay}>
           ← Día anterior
@@ -216,25 +283,38 @@ export default function FridgeDetailPage() {
 
       {!isLoading && !error ? (
         <>
-          <div className="stats-grid">
+          {/* Métricas horizontales con Time in Range */}
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
             <div className="state-card">
-              <span className="card-label">Temperatura prom.</span>
-              <strong>{stats?.temperature?.avg != null ? `${Number(stats.temperature.avg).toFixed(1)}°C` : '--'}</strong>
+              <span className="card-label">Temperatura (Prom / TIR)</span>
+              <strong>
+                {stats?.temperature?.avg != null ? `${Number(stats.temperature.avg).toFixed(1)}°C` : '--'}
+                <span style={{ fontSize: '0.9rem', color: '#4dd7b7', marginLeft: '8px' }}>
+                  ({analytics.tempInPercent} en rango)
+                </span>
+              </strong>
               <small>
-                Min {stats?.temperature?.min != null ? Number(stats.temperature.min).toFixed(1) : '--'} / Max {stats?.temperature?.max != null ? Number(stats.temperature.max).toFixed(1) : '--'}
+                Fuera de rango: <strong>{analytics.tempOutTime}</strong> | Min {stats?.temperature?.min != null ? Number(stats.temperature.min).toFixed(1) : '--'} / Max {stats?.temperature?.max != null ? Number(stats.temperature.max).toFixed(1) : '--'}
               </small>
             </div>
+
             <div className="state-card">
-              <span className="card-label">Humedad prom.</span>
-              <strong>{stats?.humidity?.avg != null ? `${Number(stats.humidity.avg).toFixed(1)}%` : '--'}</strong>
+              <span className="card-label">Humedad (Prom / TIR)</span>
+              <strong>
+                {stats?.humidity?.avg != null ? `${Number(stats.humidity.avg).toFixed(1)}%` : '--'}
+                <span style={{ fontSize: '0.9rem', color: '#98b7ff', marginLeft: '8px' }}>
+                  ({analytics.humInPercent} en rango)
+                </span>
+              </strong>
               <small>
-                Min {stats?.humidity?.min != null ? Number(stats.humidity.min).toFixed(1) : '--'} / Max {stats?.humidity?.max != null ? Number(stats.humidity.max).toFixed(1) : '--'}
+                Fuera de rango: <strong>{analytics.humOutTime}</strong> | Min {stats?.humidity?.min != null ? Number(stats.humidity.min).toFixed(1) : '--'} / Max {stats?.humidity?.max != null ? Number(stats.humidity.max).toFixed(1) : '--'}
               </small>
             </div>
+
             <div className="state-card">
-              <span className="card-label">Lecturas recibidas</span>
-              <strong>{readings.length.toLocaleString('es-CL')}</strong>
-              <small>Registros capturados hoy</small>
+              <span className="card-label">Última lectura registrada</span>
+              <strong>{analytics.lastReadingTime}</strong>
+              <small>{readings.length.toLocaleString('es-CL')} lecturas procesadas hoy</small>
             </div>
           </div>
 

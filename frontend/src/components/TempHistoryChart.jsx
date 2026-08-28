@@ -22,7 +22,6 @@ function formatTick(timestamp) {
   }).format(date);
 }
 
-// Algoritmo de muestreo uniforme por promedios en intervalos fijos
 function resampleReadings(readings, targetPoints = 180) {
   if (!readings || readings.length === 0) return [];
   if (readings.length <= targetPoints) {
@@ -78,17 +77,27 @@ function resampleReadings(readings, targetPoints = 180) {
 }
 
 export function TempHistoryChart({ readings, fridge, selectedRange }) {
-  // Re-muestreo inteligente uniforme a 180 puntos
   const data = useMemo(() => {
     return resampleReadings(readings, 180);
   }, [readings]);
 
-  // Eje X desde 00:00 hasta 24:00 fijado según la fecha pedida
   const xDomain = useMemo(() => {
     if (selectedRange?.from && selectedRange?.to) {
       return [new Date(selectedRange.from).getTime(), new Date(selectedRange.to).getTime()];
     }
     return ['dataMin', 'dataMax'];
+  }, [selectedRange]);
+
+  // Generación de marcas continuas de 00:00 a 24:00 (cada 3 horas)
+  const ticks = useMemo(() => {
+    if (!selectedRange?.from) return undefined;
+    const start = new Date(selectedRange.from).getTime();
+    const step = 3 * 3600 * 1000; // 3 horas en ms
+    const ticksArr = [];
+    for (let t = start; t <= start + 24 * 3600 * 1000; t += step) {
+      ticksArr.push(t);
+    }
+    return ticksArr;
   }, [selectedRange]);
 
   const tempDomain = useMemo(() => {
@@ -136,7 +145,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
         </div>
         <p>
           {data.length > 0
-            ? `${readings.length.toLocaleString('es-CL')} lecturas promediadas dinámicamente en ${data.length} puntos uniformes`
+            ? `${readings.length.toLocaleString('es-CL')} lecturas en franja horaria continua`
             : 'No hay lecturas registradas para este día'}
         </p>
       </div>
@@ -144,7 +153,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
       <div className="chart-frame">
         {data.length > 0 ? (
           <ResponsiveContainer width="100%" height={380}>
-            <LineChart data={data} margin={{ top: 16, right: 24, left: 0, bottom: 12 }}>
+            <LineChart data={data} margin={{ top: 16, right: 24, left: 10, bottom: 25 }}>
               <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
               
               <XAxis
@@ -152,14 +161,17 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
                 type="number"
                 scale="time"
                 domain={xDomain}
+                ticks={ticks}
                 tickFormatter={formatTick}
-                stroke="rgba(255,255,255,0.55)"
-                minTickGap={45}
+                stroke="#8f9bba"
+                tick={{ fill: '#8f9bba', fontSize: 12 }}
+                dy={10}
               />
               
               <YAxis
                 yAxisId="left"
                 stroke="rgba(77,215,183,0.9)"
+                tick={{ fill: 'rgba(77,215,183,0.9)', fontSize: 12 }}
                 domain={tempDomain}
                 unit="°C"
               />
@@ -167,6 +179,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
                 yAxisId="right"
                 orientation="right"
                 stroke="rgba(152,183,255,0.9)"
+                tick={{ fill: 'rgba(152,183,255,0.9)', fontSize: 12 }}
                 domain={humDomain}
                 unit="%"
               />
