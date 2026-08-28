@@ -396,7 +396,30 @@ button,input,select,textarea{font:inherit}
   to { opacity: 1; }
 }
 
+/* Report page styles */
 
+.cron-preview-badge {
+  background-color: #f1f5f9;
+  border-left: 3px solid #0284c7;
+  padding: 8px 12px;
+  border-radius: 4px;
+  font-size: 0.88rem;
+  color: #0f172a;
+  margin-top: -4px;
+  margin-bottom: 8px;
+}
+
+.schedule-human-cron {
+  color: #0284c7 !important;
+  font-weight: 600;
+}
+
+.field-hint {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 4px;
+}
 
 @keyframes fade-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:translateY(0)}}
 

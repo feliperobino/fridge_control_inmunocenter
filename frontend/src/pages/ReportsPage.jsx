@@ -7,8 +7,22 @@ import {
   updateReportSchedule
 } from '../api/reportSchedules.js';
 
+const DAYS_OF_WEEK = [
+  { value: '1', label: 'Lunes' },
+  { value: '2', label: 'Martes' },
+  { value: '3', label: 'Miércoles' },
+  { value: '4', label: 'Jueves' },
+  { value: '5', label: 'Viernes' },
+  { value: '6', label: 'Sábado' },
+  { value: '0', label: 'Domingo' }
+];
+
 const initialForm = {
   name: '',
+  frequencyType: 'DAILY', // 'DAILY' | 'WEEKLY' | 'MONTHLY' | 'CUSTOM'
+  time: '08:00',
+  dayOfWeek: '1',
+  dayOfMonth: '1',
   cronExpression: '0 8 * * *',
   format: 'CSV',
   fridgeIds: [],
@@ -21,6 +35,81 @@ function splitRecipients(value) {
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+/**
+ * Convierte opciones visuales a expresión CRON estándar de 5 campos (min hour day month dayOfWeek)
+ */
+function buildCronExpression({ frequencyType, time, dayOfWeek, dayOfMonth, cronExpression }) {
+  if (frequencyType === 'CUSTOM') return cronExpression;
+
+  const [hourStr, minStr] = (time || '08:00').split(':');
+  const hour = parseInt(hourStr, 10) || 0;
+  const minute = parseInt(minStr, 10) || 0;
+
+  switch (frequencyType) {
+    case 'DAILY':
+      return `${minute} ${hour} * * *`;
+    case 'WEEKLY':
+      return `${minute} ${hour} * * ${dayOfWeek}`;
+    case 'MONTHLY':
+      return `${minute} ${hour} ${dayOfMonth} * *`;
+    default:
+      return `${minute} ${hour} * * *`;
+  }
+}
+
+/**
+ * Intenta interpretar un CRON de 5 campos a un texto amigable en español
+ */
+function describeCron(cron) {
+  if (!cron) return 'Sin programación';
+  const parts = cron.trim().split(/\s+/);
+  if (parts.length !== 5) return cron;
+
+  const [min, hour, dom, mon, dow] = parts;
+  const timeStr = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+
+  if (dom === '*' && mon === '*' && dow === '*') {
+    return `Todos los días a las ${timeStr}`;
+  }
+
+  if (dom === '*' && mon === '*' && dow !== '*') {
+    const dayObj = DAYS_OF_WEEK.find((d) => d.value === dow);
+    const dayName = dayObj ? dayObj.label : `día ${dow}`;
+    return `Todos los ${dayName}s a las ${timeStr}`;
+  }
+
+  if (dom !== '*' && mon === '*' && dow === '*') {
+    return `El día ${dom} de cada mes a las ${timeStr}`;
+  }
+
+  return `Personalizado: (${cron})`;
+}
+
+/**
+ * Parsea una expresión cron existente para popular el formulario
+ */
+function parseCronToForm(cron) {
+  if (!cron) return { frequencyType: 'DAILY', time: '08:00', cronExpression: '0 8 * * *' };
+  const parts = cron.trim().split(/\s+/);
+
+  if (parts.length === 5) {
+    const [min, hour, dom, mon, dow] = parts;
+    const timeStr = `${hour.padStart(2, '0')}:${min.padStart(2, '0')}`;
+
+    if (dom === '*' && mon === '*' && dow === '*') {
+      return { frequencyType: 'DAILY', time: timeStr, cronExpression: cron };
+    }
+    if (dom === '*' && mon === '*' && dow !== '*') {
+      return { frequencyType: 'WEEKLY', time: timeStr, dayOfWeek: dow, cronExpression: cron };
+    }
+    if (dom !== '*' && mon === '*' && dow === '*') {
+      return { frequencyType: 'MONTHLY', time: timeStr, dayOfMonth: dom, cronExpression: cron };
+    }
+  }
+
+  return { frequencyType: 'CUSTOM', time: '08:00', cronExpression: cron };
 }
 
 export default function ReportsPage() {
@@ -41,9 +130,7 @@ export default function ReportsPage() {
       try {
         const [fridgesData, schedulesData] = await Promise.all([apiRequest('/fridges'), listReportSchedules()]);
 
-        if (!isMounted) {
-          return;
-        }
+        if (!isMounted) return;
 
         setFridges(Array.isArray(fridgesData) ? fridgesData : []);
         setSchedules(Array.isArray(schedulesData) ? schedulesData : []);
@@ -72,13 +159,19 @@ export default function ReportsPage() {
 
   function startEditing(schedule) {
     setEditingId(schedule.id);
+    const parsedCron = parseCronToForm(schedule.cronExpression);
+
     setForm({
       name: schedule.name,
-      cronExpression: schedule.cronExpression,
       format: schedule.format,
       fridgeIds: schedule.fridgeIds || [],
       recipients: schedule.recipients?.join(', ') || '',
-      active: Boolean(schedule.active)
+      active: Boolean(schedule.active),
+      frequencyType: parsedCron.frequencyType,
+      time: parsedCron.time || '08:00',
+      dayOfWeek: parsedCron.dayOfWeek || '1',
+      dayOfMonth: parsedCron.dayOfMonth || '1',
+      cronExpression: schedule.cronExpression
     });
   }
 
@@ -92,9 +185,11 @@ export default function ReportsPage() {
     setError('');
     setSuccess('');
 
+    const finalCron = buildCronExpression(form);
+
     const payload = {
       name: form.name.trim(),
-      cronExpression: form.cronExpression.trim(),
+      cronExpression: finalCron,
       format: form.format,
       fridgeIds: form.fridgeIds,
       recipients: splitRecipients(form.recipients),
@@ -102,23 +197,23 @@ export default function ReportsPage() {
     };
 
     if (!payload.name || !payload.cronExpression || payload.recipients.length === 0) {
-      setError('Completá nombre, cron y destinatarios.');
+      setError('Completá nombre, programación y destinatarios.');
       return;
     }
 
     try {
       if (editingId) {
         await updateReportSchedule(editingId, payload);
-        setSuccess('Schedule actualizado.');
+        setSuccess('Programación actualizada.');
       } else {
         await createReportSchedule(payload);
-        setSuccess('Schedule creado.');
+        setSuccess('Programación creada.');
       }
 
       await refreshSchedules();
       resetForm();
     } catch (submitError) {
-      setError(submitError?.data?.error || 'No se pudo guardar el schedule');
+      setError(submitError?.data?.error || 'No se pudo guardar la programación');
     }
   }
 
@@ -135,7 +230,7 @@ export default function ReportsPage() {
       <div className="page-heading">
         <span className="brand-kicker">Reportes</span>
         <h2>Schedules programados</h2>
-        <p>Administrá los cron jobs que generan y envían reportes por email.</p>
+        <p>Administrá los envíos automáticos de reportes por correo electrónico.</p>
       </div>
 
       {isLoading ? <div className="route-state">Cargando schedules...</div> : null}
@@ -148,59 +243,126 @@ export default function ReportsPage() {
             <div className="section-heading">
               <div>
                 <span className="brand-kicker">Formulario</span>
-                <h3>{editingId ? 'Editar schedule' : 'Crear schedule'}</h3>
+                <h3>{editingId ? 'Editar programación' : 'Crear nueva programación'}</h3>
               </div>
             </div>
 
             <form className="admin-form" onSubmit={handleSubmit}>
               <label>
-                Nombre
+                Nombre del reporte
                 <input
                   type="text"
                   value={form.name}
                   onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
+                  placeholder="Ej: Reporte Diario de Temperatura"
                   required
                 />
               </label>
 
-              <label>
-                Cron expression
-                <input
-                  type="text"
-                  value={form.cronExpression}
-                  onChange={(event) => setForm((current) => ({ ...current, cronExpression: event.target.value }))}
-                  placeholder="0 8 * * *"
-                  required
-                />
-              </label>
+              {/* SELECTOR VISUAL DE FRECUENCIA Y HORARIO */}
+              <div className="admin-grid">
+                <label>
+                  Frecuencia de envío
+                  <select
+                    value={form.frequencyType}
+                    onChange={(event) => setForm((current) => ({ ...current, frequencyType: event.target.value }))}
+                  >
+                    <option value="DAILY">Diario (Todos los días)</option>
+                    <option value="WEEKLY">Semanal (Un día a la semana)</option>
+                    <option value="MONTHLY">Mensual (Un día del mes)</option>
+                    <option value="CUSTOM">Personalizado (Sintaxis Cron)</option>
+                  </select>
+                </label>
+
+                {form.frequencyType !== 'CUSTOM' ? (
+                  <label>
+                    Hora de envío
+                    <input
+                      type="time"
+                      value={form.time}
+                      onChange={(event) => setForm((current) => ({ ...current, time: event.target.value }))}
+                      required
+                    />
+                  </label>
+                ) : (
+                  <label>
+                    Expresión Cron
+                    <input
+                      type="text"
+                      value={form.cronExpression}
+                      onChange={(event) => setForm((current) => ({ ...current, cronExpression: event.target.value }))}
+                      placeholder="0 8 * * *"
+                      required
+                    />
+                  </label>
+                )}
+              </div>
+
+              {/* OPCIONES ADICIONALES SEGÚN FRECUENCIA */}
+              {form.frequencyType === 'WEEKLY' ? (
+                <label>
+                  Día de la semana
+                  <select
+                    value={form.dayOfWeek}
+                    onChange={(event) => setForm((current) => ({ ...current, dayOfWeek: event.target.value }))}
+                  >
+                    {DAYS_OF_WEEK.map((day) => (
+                      <option key={day.value} value={day.value}>
+                        {day.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              {form.frequencyType === 'MONTHLY' ? (
+                <label>
+                  Día del mes
+                  <select
+                    value={form.dayOfMonth}
+                    onChange={(event) => setForm((current) => ({ ...current, dayOfMonth: event.target.value }))}
+                  >
+                    {Array.from({ length: 31 }, (_, i) => i + 1).map((dayNum) => (
+                      <option key={dayNum} value={String(dayNum)}>
+                        Día {dayNum}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : null}
+
+              {/* RESUMEN DE LA PROGRAMACIÓN RESULTANTE */}
+              <div className="cron-preview-badge">
+                <strong>Resumen:</strong> {describeCron(buildCronExpression(form))}
+              </div>
 
               <div className="admin-grid">
                 <label>
-                  Formato
+                  Formato del archivo
                   <select
                     value={form.format}
                     onChange={(event) => setForm((current) => ({ ...current, format: event.target.value }))}
                   >
                     <option value="CSV">CSV</option>
-                    <option value="XLSX">Excel</option>
+                    <option value="XLSX">Excel (.xlsx)</option>
                     <option value="PDF">PDF</option>
                   </select>
                 </label>
 
                 <label>
-                  Destinatarios
+                  Destinatarios (separados por coma)
                   <input
                     type="text"
                     value={form.recipients}
                     onChange={(event) => setForm((current) => ({ ...current, recipients: event.target.value }))}
-                    placeholder="ops@example.com, qa@example.com"
+                    placeholder="ops@empresa.com, qa@empresa.com"
                     required
                   />
                 </label>
               </div>
 
               <label>
-                Refrigeradores
+                Refrigeradores a incluir
                 <select
                   multiple
                   value={form.fridgeIds}
@@ -217,6 +379,7 @@ export default function ReportsPage() {
                     </option>
                   ))}
                 </select>
+                <small className="field-hint">Mantené presionado Ctrl/Cmd para seleccionar varios.</small>
               </label>
 
               <label className="checkbox-field">
@@ -225,12 +388,12 @@ export default function ReportsPage() {
                   checked={form.active}
                   onChange={(event) => setForm((current) => ({ ...current, active: event.target.checked }))}
                 />
-                Activo
+                Activar programación
               </label>
 
               <div className="button-row">
                 <button className="button button-primary" type="submit">
-                  {editingId ? 'Guardar cambios' : 'Crear schedule'}
+                  {editingId ? 'Guardar cambios' : 'Crear programación'}
                 </button>
                 {editingId ? (
                   <button className="button button-secondary" type="button" onClick={resetForm}>
@@ -245,7 +408,7 @@ export default function ReportsPage() {
             <div className="section-heading">
               <div>
                 <span className="brand-kicker">Listado</span>
-                <h3>Schedules activos e inactivos</h3>
+                <h3>Programaciones guardadas</h3>
               </div>
             </div>
 
@@ -255,10 +418,13 @@ export default function ReportsPage() {
                   <article key={schedule.id} className="admin-table-row">
                     <div>
                       <strong>{schedule.name}</strong>
-                      <small>
-                        {schedule.cronExpression} · {schedule.format} · {schedule.active ? 'Activo' : 'Inactivo'}
+                      <small className="schedule-human-cron">
+                        🕒 {describeCron(schedule.cronExpression)}
                       </small>
-                      <small>{schedule.recipients?.join(', ')}</small>
+                      <small>
+                        Formato: {schedule.format} · Estado: {schedule.active ? 'Activo' : 'Inactivo'}
+                      </small>
+                      <small>✉️ {schedule.recipients?.join(', ')}</small>
                     </div>
 
                     <div className="button-row">
@@ -272,7 +438,7 @@ export default function ReportsPage() {
                   </article>
                 ))
               ) : (
-                <div className="empty-state">No hay schedules creados todavía.</div>
+                <div className="empty-state">No hay programaciones creadas todavía.</div>
               )}
             </div>
           </div>
