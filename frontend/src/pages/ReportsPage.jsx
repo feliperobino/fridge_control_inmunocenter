@@ -37,9 +37,6 @@ function splitRecipients(value) {
     .filter(Boolean);
 }
 
-/**
- * Convierte opciones visuales a expresión CRON estándar de 5 campos (min hour day month dayOfWeek)
- */
 function buildCronExpression({ frequencyType, time, dayOfWeek, dayOfMonth, cronExpression }) {
   if (frequencyType === 'CUSTOM') return cronExpression;
 
@@ -59,9 +56,6 @@ function buildCronExpression({ frequencyType, time, dayOfWeek, dayOfMonth, cronE
   }
 }
 
-/**
- * Intenta interpretar un CRON de 5 campos a un texto amigable en español
- */
 function describeCron(cron) {
   if (!cron) return 'Sin programación';
   const parts = cron.trim().split(/\s+/);
@@ -87,9 +81,6 @@ function describeCron(cron) {
   return `Personalizado: (${cron})`;
 }
 
-/**
- * Parsea una expresión cron existente para popular el formulario
- */
 function parseCronToForm(cron) {
   if (!cron) return { frequencyType: 'DAILY', time: '08:00', cronExpression: '0 8 * * *' };
   const parts = cron.trim().split(/\s+/);
@@ -178,6 +169,26 @@ export default function ReportsPage() {
   async function refreshSchedules() {
     const schedulesData = await listReportSchedules();
     setSchedules(Array.isArray(schedulesData) ? schedulesData : []);
+  }
+
+  const allFridgesSelected = fridges.length > 0 && form.fridgeIds.length === fridges.length;
+
+  function handleToggleAllFridges() {
+    if (allFridgesSelected) {
+      setForm((prev) => ({ ...prev, fridgeIds: [] }));
+    } else {
+      setForm((prev) => ({ ...prev, fridgeIds: fridges.map((f) => f.id) }));
+    }
+  }
+
+  function handleToggleFridge(id) {
+    setForm((prev) => {
+      const exists = prev.fridgeIds.includes(id);
+      return {
+        ...prev,
+        fridgeIds: exists ? prev.fridgeIds.filter((item) => item !== id) : [...prev.fridgeIds, id]
+      };
+    });
   }
 
   async function handleSubmit(event) {
@@ -361,26 +372,41 @@ export default function ReportsPage() {
                 </label>
               </div>
 
-              <label>
-                Refrigeradores a incluir
-                <select
-                  multiple
-                  value={form.fridgeIds}
-                  onChange={(event) =>
-                    setForm((current) => ({
-                      ...current,
-                      fridgeIds: Array.from(event.target.selectedOptions, (option) => option.value)
-                    }))
-                  }
-                >
-                  {fridges.map((fridge) => (
-                    <option key={fridge.id} value={fridge.id}>
-                      {fridge.name}
-                    </option>
-                  ))}
-                </select>
-                <small className="field-hint">Mantené presionado Ctrl/Cmd para seleccionar varios.</small>
-              </label>
+              {/* SELECTOR LIMPIO CON CHECKBOXES */}
+              <div className="fridge-checkbox-section">
+                <div className="fridge-checkbox-header">
+                  <span>Refrigeradores a incluir ({form.fridgeIds.length} seleccionados)</span>
+                  <label className="checkbox-field-inline">
+                    <input
+                      type="checkbox"
+                      checked={allFridgesSelected}
+                      onChange={handleToggleAllFridges}
+                    />
+                    <strong>
+                      {allFridgesSelected ? 'Desmarcar todos' : 'Incluir todos los refrigeradores'}
+                    </strong>
+                  </label>
+                </div>
+
+                <div className="fridge-checkbox-list">
+                  {fridges.map((fridge) => {
+                    const isChecked = form.fridgeIds.includes(fridge.id);
+                    return (
+                      <label key={fridge.id} className={`fridge-checkbox-card ${isChecked ? 'selected' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => handleToggleFridge(fridge.id)}
+                        />
+                        <div className="fridge-checkbox-info">
+                          <span className="fridge-name">{fridge.name}</span>
+                          <span className="fridge-sub">{fridge.location || `Slave ${fridge.modbusSlaveId}`}</span>
+                        </div>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
 
               <label className="checkbox-field">
                 <input
