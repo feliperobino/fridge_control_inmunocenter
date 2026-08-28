@@ -1,7 +1,6 @@
 import cron from 'node-cron';
 import prisma from '../config/prisma.js';
 import env from '../config/env.js';
-import logger from '../utils/logger.js';
 
 /**
  * Inicia el cronjob diario de purga/retención de lecturas.
@@ -22,20 +21,14 @@ export function initRetentionScheduler() {
         },
       });
 
-      // Si existe un logger global o de utilidad lo usas; si no, console.log
-      if (logger && logger.info) {
-        logger.info(`[retention] Borradas ${result.count} lecturas anteriores a ${cutoffDate.toISOString()}`);
-      } else {
-        console.log(`[retention] Borradas ${result.count} lecturas anteriores a ${cutoffDate.toISOString()}`);
-      }
+      // eslint-disable-next-line no-console
+      console.log(`[retention] Borradas ${result.count} lecturas anteriores a ${cutoffDate.toISOString()}`);
     } catch (error) {
-      if (logger && logger.error) {
-        logger.error('[retention] Error durante el proceso de limpieza de lecturas:', error);
-      } else {
-        console.error('[retention] Error durante el proceso de limpieza de lecturas:', error);
-      }
+      // eslint-disable-next-line no-console
+      console.error('[retention] Error durante el proceso de limpieza de lecturas:', error);
     }
   });
 
+  // eslint-disable-next-line no-console
   console.log(`Retention scheduler initialized (Retención: ${env.readingRetentionMonths} meses)`);
 }
