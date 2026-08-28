@@ -7,22 +7,39 @@ import { ExportButtons } from '../components/ExportButtons.jsx';
 import { TempHistoryChart } from '../components/TempHistoryChart.jsx';
 
 const RANGE_PRESETS = [
-  { key: '24h', label: '24 horas' },
-  { key: '7d', label: '7 días' },
-  { key: '30d', label: '30 días' },
-  { key: 'custom', label: 'Custom' }
+  { key: '6h', label: 'Últimas 6 horas' },
+  { key: '12h', label: 'Últimas 12 horas' },
+  { key: '24h', label: 'Últimas 24 horas' },
+  { key: '48h', label: 'Últimas 48 horas' },
+  { key: '7d', label: 'Últimos 7 días' },
+  { key: '30d', label: 'Últimos 30 días' },
+  { key: 'custom', label: 'Personalizado' }
 ];
 
 function getPresetRange(preset) {
   const to = new Date();
   const from = new Date(to);
 
-  if (preset === '7d') {
-    from.setDate(from.getDate() - 7);
-  } else if (preset === '30d') {
-    from.setDate(from.getDate() - 30);
-  } else {
-    from.setHours(from.getHours() - 24);
+  switch (preset) {
+    case '6h':
+      from.setHours(from.getHours() - 6);
+      break;
+    case '12h':
+      from.setHours(from.getHours() - 12);
+      break;
+    case '48h':
+      from.setHours(from.getHours() - 48);
+      break;
+    case '7d':
+      from.setDate(from.getDate() - 7);
+      break;
+    case '30d':
+      from.setDate(from.getDate() - 30);
+      break;
+    case '24h':
+    default:
+      from.setHours(from.getHours() - 24);
+      break;
   }
 
   return { from: from.toISOString(), to: to.toISOString() };
@@ -56,7 +73,7 @@ export default function FridgeDetailPage() {
   const [error, setError] = useState('');
 
   const rangeLabel = useMemo(
-    () => RANGE_PRESETS.find((preset) => preset.key === rangePreset)?.label || '24 horas',
+    () => RANGE_PRESETS.find((preset) => preset.key === rangePreset)?.label || 'Últimas 24 horas',
     [rangePreset]
   );
 
@@ -90,10 +107,16 @@ export default function FridgeDetailPage() {
       try {
         const queryFrom = selectedRange.from;
         const queryTo = selectedRange.to;
+
+        // Determinamos el límite de lecturas según la ventana
+        let limit = 2000;
+        if (rangePreset === '7d') limit = 4000;
+        if (rangePreset === '30d') limit = 8000;
+
         const [fridgeData, readingsData, statsData, alarmsData] = await Promise.all([
           apiRequest(`/fridges/${id}`),
           apiRequest(
-            `/fridges/${id}/readings?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}&limit=500`
+            `/fridges/${id}/readings?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}&limit=${limit}`
           ),
           apiRequest(`/fridges/${id}/stats?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}`),
           apiRequest(`/alarms?status=all&fridgeId=${encodeURIComponent(id)}`)
@@ -103,8 +126,15 @@ export default function FridgeDetailPage() {
           return;
         }
 
+        const rawReadings = Array.isArray(readingsData?.readings) ? readingsData.readings : [];
+        
+        // Garantizamos orden cronológico ascendente (pasado -> presente)
+        const sortedReadings = rawReadings.sort(
+          (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+        );
+
         setFridge(fridgeData);
-        setReadings(Array.isArray(readingsData?.readings) ? readingsData.readings : []);
+        setReadings(sortedReadings);
         setStats(statsData);
         setAlarms(Array.isArray(alarmsData) ? alarmsData : []);
       } catch (loadError) {
@@ -125,7 +155,7 @@ export default function FridgeDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [id, selectedRange]);
+  }, [id, selectedRange, rangePreset]);
 
   function handleCustomRangeSubmit(event) {
     event.preventDefault();
@@ -161,7 +191,7 @@ export default function FridgeDetailPage() {
     };
 
     if (!payload.name || [payload.tempMin, payload.tempMax, payload.humMin, payload.humMax].some((value) => Number.isNaN(value))) {
-      setEditError('Revisá nombre y rangos antes de guardar.');
+      setEditError('Revisa nombre y rangos antes de guardar.');
       return;
     }
 
@@ -189,9 +219,7 @@ export default function FridgeDetailPage() {
         <div>
           <span className="brand-kicker">Detalle</span>
           <h2>{fridge?.name || `Refrigerador ${id}`}</h2>
-          <p>
-            Histórico de temperatura y humedad para el rango {rangeLabel.toLowerCase()}.
-          </p>
+          <p>Histórico de temperatura y humedad para el rango {rangeLabel.toLowerCase()}.</p>
         </div>
 
         <div className="page-actions-stack">
@@ -283,7 +311,7 @@ export default function FridgeDetailPage() {
           </div>
 
           <div className="card-shell">
-            <TempHistoryChart readings={readings} fridge={fridge} />
+            <TempHistoryChart readings={readings} fridge={fridge} rangePreset={rangePreset} />
           </div>
 
           <div className="card-shell">
