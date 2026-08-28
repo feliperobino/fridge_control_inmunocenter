@@ -7,6 +7,7 @@ import fridgesRoutes from './routes/fridges.routes.js';
 import reportSchedulesRoutes from './routes/report-schedules.routes.js';
 import usersRoutes from './routes/users.routes.js';
 import eventsRoutes from './routes/events.route.js';
+import systemHealthRoutes from './routes/system-health.routes.js'; // <-- Importado
 import helmet from 'helmet';
 import { errorHandlerMiddleware } from './middlewares/error-handler.middleware.js';
 
@@ -26,6 +27,7 @@ app.use('/api/fridges', fridgesRoutes);
 app.use('/api/alarms', alarmsRoutes);
 app.use('/api/exports', exportsRoutes);
 app.use('/api/report-schedules', reportSchedulesRoutes);
+app.use('/api/admin', systemHealthRoutes); // <-- Agregado
 app.use('/api', eventsRoutes);
 
 app.use(errorHandlerMiddleware);
