@@ -91,3 +91,7 @@ export function subscribeToRealtimeStatus(callback) {
 export function getRealtimeStatus() {
   return connectionStatus;
 }
+
+export function getLastActivityTimestamp() {
+  return lastActivityTimestamp;
+}
