@@ -5,7 +5,7 @@ const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/alarms', label: 'Alarmas' },
   { to: '/reports', label: 'Reportes' },
-  { to: '/users', label: 'Usuarios', roles: ['ADMIN'] } // Ocultamiento silencioso por rol
+  { to: '/users', label: 'Usuarios', roles: ['ADMIN'] }
 ];
 
 export function Layout() {
@@ -13,7 +13,6 @@ export function Layout() {
   const [searchParams] = useSearchParams();
   const isKiosk = searchParams.get('fullscreen') === '1' || window.location.pathname === '/dashboard/kiosk';
 
-  // Si estamos en modo Kiosk, renderizamos el contenido directamente sin el cascarón de la UI
   if (isKiosk) {
     return (
       <div className="kiosk-layout-container">
@@ -22,7 +21,7 @@ export function Layout() {
     );
   }
 
-  // Filtrado silencioso de navegación según permisos/roles
+  // Filtro estricto: solo incluir ítems del menú permitidos para el rol actual
   const visibleNavItems = navItems.filter(
     (item) => !item.roles || hasRole(item.roles)
   );

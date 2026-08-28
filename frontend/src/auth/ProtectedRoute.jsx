@@ -1,22 +1,16 @@
-import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 
 export function ProtectedRoute({ children, allowedRoles }) {
   const { isLoading, user, hasRole } = useAuth();
-  const location = useLocation();
 
   if (isLoading) {
-    return <div className="route-state">Restaurando sesión...</div>;
+    return <div className="route-state">Cargando...</div>;
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+  // Si no hay usuario autenticado o no posee el rol requerido, no se renderiza nada
+  if (!user || (allowedRoles && !hasRole(allowedRoles))) {
+    return null;
   }
 
-  if (allowedRoles && !hasRole(allowedRoles)) {
-    // Redirección silenciosa a dashboard sin pantalla de error 403
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  return children || <Outlet />;
+  return children || null;
 }
