@@ -334,7 +334,16 @@ export async function exportReadingsToPdf(fridgeId, from, to, options = {}) {
 }
 
 
-async function fetchChartBuffer(labels, maxSeries, minSeries, avgSeries, title, unit, isTemperature = true, limits = { min: 2, max: 8 }) {
+async function fetchChartBuffer(
+  labels,
+  maxSeries,
+  minSeries,
+  avgSeries,
+  title,
+  unit,
+  isTemperature = true,
+  limits = { min: 2, max: 8 }
+) {
   const chartConfig = {
     type: 'line',
     data: {
@@ -367,19 +376,70 @@ async function fetchChartBuffer(labels, maxSeries, minSeries, avgSeries, title, 
       ]
     },
     options: {
-      title: { display: true, text: title, fontSize: 10 },
-      legend: { display: true, position: 'bottom', labels: { boxWidth: 10, fontSize: 8 } },
+      title: {
+        display: true,
+        text: title,
+        fontSize: 10
+      },
+      legend: {
+        display: true,
+        position: 'bottom',
+        labels: {
+          boxWidth: 10,
+          fontSize: 8
+        }
+      },
       scales: {
-        xAxes: [{ ticks: { fontSize: 7, maxRotation: 45 } }],
-        yAxes: [{ ticks: { fontSize: 8, callback: (val) => `${val}${unit}` } }]
+        xAxes: [
+          {
+            ticks: {
+              fontSize: 7,
+              maxRotation: 45
+            }
+          }
+        ],
+        yAxes: [
+          {
+            ticks: {
+              fontSize: 8,
+              callback: (val) => `${val}${unit}`
+            }
+          }
+        ]
       }
-    }
+    },
+    plugins: [
+      {
+        beforeDraw: (chart) => {
+          const yScale = chart.scales['y-axis-0'];
+          if (!yScale) return;
+
+          const ctx = chart.chart.ctx;
+
+          const yTop = yScale.getPixelForValue(limits.max);
+          const yBottom = yScale.getPixelForValue(limits.min);
+
+          ctx.save();
+          ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
+          ctx.fillRect(
+            chart.chartArea.left,
+            yTop,
+            chart.chartArea.right - chart.chartArea.left,
+            yBottom - yTop
+          );
+          ctx.restore();
+        }
+      }
+    ]
   };
 
-  const url = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}&w=350&h=180&bkg=white`;
+  const url =
+    `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(chartConfig))}` +
+    `&w=350&h=180&bkg=white`;
 
   try {
     const res = await fetch(url);
+
     if (res.ok) {
       const arrayBuffer = await res.arrayBuffer();
       return Buffer.from(arrayBuffer);
@@ -387,6 +447,7 @@ async function fetchChartBuffer(labels, maxSeries, minSeries, avgSeries, title, 
   } catch (err) {
     // Si falla QuickChart, continúa sin la imagen (fallback vectorial)
   }
+
   return null;
 }
 
