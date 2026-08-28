@@ -61,7 +61,6 @@ export default function FridgeDetailPage() {
     return selectedDay === new Date().toISOString().slice(0, 10);
   }, [selectedDay]);
 
-  // Cálculos de Time in Range y Última Lectura
   const analytics = useMemo(() => {
     if (!readings || readings.length === 0 || !fridge) {
       return {
@@ -69,23 +68,30 @@ export default function FridgeDetailPage() {
         tempOutTime: '--',
         humInPercent: '--',
         humOutTime: '--',
-        lastReadingTime: '--'
+        lastReadingTime: '--',
+        tempMin: null,
+        tempMax: null
       };
     }
 
-    const tempMin = Number(fridge.tempMin);
-    const tempMax = Number(fridge.tempMax);
-    const humMin = Number(fridge.humMin);
-    const humMax = Number(fridge.humMax);
+    const tempMinConfig = Number(fridge.tempMin);
+    const tempMaxConfig = Number(fridge.tempMax);
+    const humMinConfig = Number(fridge.humMin);
+    const humMaxConfig = Number(fridge.humMax);
 
     let tempInCount = 0;
     let humInCount = 0;
+    let minTempRecorded = Infinity;
+    let maxTempRecorded = -Infinity;
 
     readings.forEach((r) => {
-      if (r.temperature >= tempMin && r.temperature <= tempMax) {
+      if (r.temperature < minTempRecorded) minTempRecorded = r.temperature;
+      if (r.temperature > maxTempRecorded) maxTempRecorded = r.temperature;
+
+      if (r.temperature >= tempMinConfig && r.temperature <= tempMaxConfig) {
         tempInCount++;
       }
-      if (r.humidity >= humMin && r.humidity <= humMax) {
+      if (r.humidity >= humMinConfig && r.humidity <= humMaxConfig) {
         humInCount++;
       }
     });
@@ -94,12 +100,10 @@ export default function FridgeDetailPage() {
     const tempInPercent = ((tempInCount / total) * 100).toFixed(1);
     const humInPercent = ((humInCount / total) * 100).toFixed(1);
 
-    // Estimación del tiempo fuera basado en la franja activa (24h)
     const minutesPerReading = (24 * 60) / total;
     const tempOutMinutes = (total - tempInCount) * minutesPerReading;
     const humOutMinutes = (total - humInCount) * minutesPerReading;
 
-    // Obtener la hora del último registro cronológico
     const sorted = [...readings].sort(
       (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
     );
@@ -116,7 +120,9 @@ export default function FridgeDetailPage() {
       tempOutTime: formatDuration(tempOutMinutes),
       humInPercent: `${humInPercent}%`,
       humOutTime: formatDuration(humOutMinutes),
-      lastReadingTime
+      lastReadingTime,
+      tempMin: minTempRecorded !== Infinity ? minTempRecorded : null,
+      tempMax: maxTempRecorded !== -Infinity ? maxTempRecorded : null
     };
   }, [readings, fridge]);
 
@@ -283,39 +289,49 @@ export default function FridgeDetailPage() {
 
       {!isLoading && !error ? (
         <>
-          {/* Métricas horizontales con Time in Range */}
-          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+          {/* Tarjetas horizontales (Temperatura, Extremos, Humedad, Última Lectura) */}
+          <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+            
+            {/* 1. Temperatura Promedio */}
             <div className="state-card">
-              <span className="card-label">Temperatura (Prom / TIR)</span>
+              <span className="card-label">Temperatura Prom.</span>
               <strong>
                 {stats?.temperature?.avg != null ? `${Number(stats.temperature.avg).toFixed(1)}°C` : '--'}
-                <span style={{ fontSize: '0.9rem', color: '#4dd7b7', marginLeft: '8px' }}>
-                  ({analytics.tempInPercent} en rango)
-                </span>
               </strong>
               <small>
-                Fuera de rango: <strong>{analytics.tempOutTime}</strong> | Min {stats?.temperature?.min != null ? Number(stats.temperature.min).toFixed(1) : '--'} / Max {stats?.temperature?.max != null ? Number(stats.temperature.max).toFixed(1) : '--'}
+                En rango: <strong style={{ color: '#4dd7b7' }}>{analytics.tempInPercent}</strong> ({analytics.tempOutTime} fuera)
               </small>
             </div>
 
+            {/* 2. Tarjeta Extra: Temperatura Máxima / Mínima */}
             <div className="state-card">
-              <span className="card-label">Humedad (Prom / TIR)</span>
+              <span className="card-label">Temp Máxima / Mínima</span>
+              <strong>
+                {analytics.tempMax != null ? `${analytics.tempMax.toFixed(1)}°C` : '--'}
+                <span style={{ fontSize: '0.9rem', color: '#8f9bba', margin: '0 6px' }}>/</span>
+                {analytics.tempMin != null ? `${analytics.tempMin.toFixed(1)}°C` : '--'}
+              </strong>
+              <small>Puntos extremos en el día</small>
+            </div>
+
+            {/* 3. Humedad Promedio */}
+            <div className="state-card">
+              <span className="card-label">Humedad Prom.</span>
               <strong>
                 {stats?.humidity?.avg != null ? `${Number(stats.humidity.avg).toFixed(1)}%` : '--'}
-                <span style={{ fontSize: '0.9rem', color: '#98b7ff', marginLeft: '8px' }}>
-                  ({analytics.humInPercent} en rango)
-                </span>
               </strong>
               <small>
-                Fuera de rango: <strong>{analytics.humOutTime}</strong> | Min {stats?.humidity?.min != null ? Number(stats.humidity.min).toFixed(1) : '--'} / Max {stats?.humidity?.max != null ? Number(stats.humidity.max).toFixed(1) : '--'}
+                En rango: <strong style={{ color: '#98b7ff' }}>{analytics.humInPercent}</strong> ({analytics.humOutTime} fuera)
               </small>
             </div>
 
+            {/* 4. Hora Última Lectura */}
             <div className="state-card">
               <span className="card-label">Última lectura registrada</span>
               <strong>{analytics.lastReadingTime}</strong>
-              <small>{readings.length.toLocaleString('es-CL')} lecturas procesadas hoy</small>
+              <small>{readings.length.toLocaleString('es-CL')} lecturas hoy</small>
             </div>
+
           </div>
 
           <div className="card-shell">
@@ -323,6 +339,7 @@ export default function FridgeDetailPage() {
               readings={readings}
               fridge={fridge}
               selectedRange={selectedRange}
+              extremeStats={{ tempMin: analytics.tempMin, tempMax: analytics.tempMax }}
             />
           </div>
 

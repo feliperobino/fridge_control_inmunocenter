@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -76,7 +76,11 @@ function resampleReadings(readings, targetPoints = 180) {
   return resampled;
 }
 
-export function TempHistoryChart({ readings, fridge, selectedRange }) {
+export function TempHistoryChart({ readings, fridge, selectedRange, extremeStats }) {
+  // Estado para visibilidad de líneas
+  const [showTemp, setShowTemp] = useState(true);
+  const [showHum, setShowHum] = useState(true);
+
   const data = useMemo(() => {
     return resampleReadings(readings, 180);
   }, [readings]);
@@ -88,11 +92,10 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
     return ['dataMin', 'dataMax'];
   }, [selectedRange]);
 
-  // Generación de marcas continuas de 00:00 a 24:00 (cada 3 horas)
   const ticks = useMemo(() => {
     if (!selectedRange?.from) return undefined;
     const start = new Date(selectedRange.from).getTime();
-    const step = 3 * 3600 * 1000; // 3 horas en ms
+    const step = 3 * 3600 * 1000;
     const ticksArr = [];
     for (let t = start; t <= start + 24 * 3600 * 1000; t += step) {
       ticksArr.push(t);
@@ -138,22 +141,37 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
 
   return (
     <div className="chart-shell">
-      <div className="section-heading">
+      <div className="section-heading" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div>
           <span className="brand-kicker">Histórico continuo</span>
           <h3>Temperatura y humedad</h3>
         </div>
-        <p>
-          {data.length > 0
-            ? `${readings.length.toLocaleString('es-CL')} lecturas en franja horaria continua`
-            : 'No hay lecturas registradas para este día'}
-        </p>
+        
+        {/* Selector de visibilidad de series */}
+        <div style={{ display: 'flex', gap: '16px', fontSize: '0.9rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#4dd7b7' }}>
+            <input
+              type="checkbox"
+              checked={showTemp}
+              onChange={(e) => setShowTemp(e.target.checked)}
+            />
+            Temperatura
+          </label>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#98b7ff' }}>
+            <input
+              type="checkbox"
+              checked={showHum}
+              onChange={(e) => setShowHum(e.target.checked)}
+            />
+            Humedad
+          </label>
+        </div>
       </div>
 
       <div className="chart-frame">
         {data.length > 0 ? (
           <ResponsiveContainer width="100%" height={380}>
-            <LineChart data={data} margin={{ top: 16, right: 24, left: 10, bottom: 25 }}>
+            <LineChart data={data} margin={{ top: 16, right: 35, left: 10, bottom: 25 }}>
               <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
               
               <XAxis
@@ -174,6 +192,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
                 tick={{ fill: 'rgba(77,215,183,0.9)', fontSize: 12 }}
                 domain={tempDomain}
                 unit="°C"
+                hide={!showTemp}
               />
               <YAxis
                 yAxisId="right"
@@ -182,6 +201,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
                 tick={{ fill: 'rgba(152,183,255,0.9)', fontSize: 12 }}
                 domain={humDomain}
                 unit="%"
+                hide={!showHum}
               />
               
               <Tooltip
@@ -205,50 +225,73 @@ export function TempHistoryChart({ readings, fridge, selectedRange }) {
                 ]}
               />
 
-              {fridge?.tempMin !== undefined && fridge?.tempMax !== undefined ? (
-                <>
-                  <ReferenceArea
-                    yAxisId="left"
-                    y1={fridge.tempMin}
-                    y2={fridge.tempMax}
-                    fill="rgba(77, 215, 183, 0.08)"
-                    stroke="none"
-                  />
-                  <ReferenceLine
-                    yAxisId="left"
-                    y={fridge.tempMin}
-                    stroke="rgba(77, 215, 183, 0.4)"
-                    strokeDasharray="3 3"
-                  />
-                  <ReferenceLine
-                    yAxisId="left"
-                    y={fridge.tempMax}
-                    stroke="rgba(77, 215, 183, 0.4)"
-                    strokeDasharray="3 3"
-                  />
-                </>
+              {/* Rango óptimo del refrigerador */}
+              {showTemp && fridge?.tempMin !== undefined && fridge?.tempMax !== undefined ? (
+                <ReferenceArea
+                  yAxisId="left"
+                  y1={fridge.tempMin}
+                  y2={fridge.tempMax}
+                  fill="rgba(77, 215, 183, 0.05)"
+                  stroke="none"
+                />
               ) : null}
 
-              <Line
-                type="monotone"
-                dataKey="temperature"
-                yAxisId="left"
-                stroke="#4dd7b7"
-                strokeWidth={2}
-                dot={false}
-                name="Temperatura"
-                isAnimationActive={false}
-              />
-              <Line
-                type="monotone"
-                dataKey="humidity"
-                yAxisId="right"
-                stroke="#98b7ff"
-                strokeWidth={2}
-                dot={false}
-                name="Humedad"
-                isAnimationActive={false}
-              />
+              {/* Líneas horizontales con etiquetas para T_max y T_min registradas */}
+              {showTemp && extremeStats?.tempMax != null ? (
+                <ReferenceLine
+                  yAxisId="left"
+                  y={extremeStats.tempMax}
+                  stroke="#ef4444"
+                  strokeDasharray="5 5"
+                  label={{
+                    value: `T_max: ${extremeStats.tempMax.toFixed(1)}°C`,
+                    fill: '#ef4444',
+                    position: 'top',
+                    fontSize: 12
+                  }}
+                />
+              ) : null}
+
+              {showTemp && extremeStats?.tempMin != null ? (
+                <ReferenceLine
+                  yAxisId="left"
+                  y={extremeStats.tempMin}
+                  stroke="#3b82f6"
+                  strokeDasharray="5 5"
+                  label={{
+                    value: `T_min: ${extremeStats.tempMin.toFixed(1)}°C`,
+                    fill: '#3b82f6',
+                    position: 'bottom',
+                    fontSize: 12
+                  }}
+                />
+              ) : null}
+
+              {showTemp ? (
+                <Line
+                  type="monotone"
+                  dataKey="temperature"
+                  yAxisId="left"
+                  stroke="#4dd7b7"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Temperatura"
+                  isAnimationActive={false}
+                />
+              ) : null}
+
+              {showHum ? (
+                <Line
+                  type="monotone"
+                  dataKey="humidity"
+                  yAxisId="right"
+                  stroke="#98b7ff"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Humedad"
+                  isAnimationActive={false}
+                />
+              ) : null}
             </LineChart>
           </ResponsiveContainer>
         ) : (
