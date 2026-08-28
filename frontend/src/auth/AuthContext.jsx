@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, useMemo, useCallback } from 'react';
 import { apiLogin, apiLogout, apiRefresh } from '../api/client.js';
 import { clearAccessToken, setAccessToken } from './session.js';
 
@@ -63,13 +63,31 @@ export function AuthProvider({ children }) {
     }
   }
 
-  const value = {
-    user,
-    isLoading,
-    isAuthenticated: Boolean(user),
-    login,
-    logout
-  };
+  const userRole = user?.role ? String(user.role).toUpperCase() : null;
+  const isAdmin = userRole === 'ADMIN';
+
+  const hasRole = useCallback(
+    (allowedRoles) => {
+      if (!userRole) return false;
+      if (!allowedRoles || !Array.isArray(allowedRoles) || allowedRoles.length === 0) return true;
+      return allowedRoles.some((r) => String(r).toUpperCase() === userRole);
+    },
+    [userRole]
+  );
+
+  const value = useMemo(
+    () => ({
+      user,
+      isLoading,
+      isAuthenticated: Boolean(user),
+      isAdmin,
+      userRole,
+      hasRole,
+      login,
+      logout
+    }),
+    [user, isLoading, isAdmin, userRole, hasRole]
+  );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
