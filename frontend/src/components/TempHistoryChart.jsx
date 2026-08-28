@@ -11,22 +11,10 @@ import {
   YAxis
 } from 'recharts';
 
-function formatTick(timestamp, rangePreset) {
+function formatTick(timestamp) {
   const date = new Date(timestamp);
-  if (Number.isNaN(date.getTime())) {
-    return timestamp;
-  }
+  if (Number.isNaN(date.getTime())) return timestamp;
 
-  if (rangePreset === '7d' || rangePreset === '30d') {
-    return new Intl.DateTimeFormat('es-CL', {
-      day: '2-digit',
-      month: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
-    }).format(date);
-  }
-
-  // Formato de hora en 24h (HH:mm) para ver la franja horaria clara (ej. 02:00, 08:00, 14:00, 20:00)
   return new Intl.DateTimeFormat('es-CL', {
     hour: '2-digit',
     minute: '2-digit',
@@ -34,18 +22,68 @@ function formatTick(timestamp, rangePreset) {
   }).format(date);
 }
 
-export function TempHistoryChart({ readings, fridge, rangePreset = '24h', selectedRange }) {
-  // Redondeo de decimales y mapeo de tiempos a timestamps numéricos
-  const data = useMemo(() => {
-    return (readings || []).map((reading) => ({
-      ...reading,
-      temperature: typeof reading.temperature === 'number' ? Number(reading.temperature.toFixed(1)) : reading.temperature,
-      humidity: typeof reading.humidity === 'number' ? Number(reading.humidity.toFixed(1)) : reading.humidity,
-      timestamp: new Date(reading.recordedAt).getTime()
+// Algoritmo de muestreo uniforme por promedios en intervalos fijos
+function resampleReadings(readings, targetPoints = 180) {
+  if (!readings || readings.length === 0) return [];
+  if (readings.length <= targetPoints) {
+    return readings.map((r) => ({
+      ...r,
+      temperature: Number(r.temperature.toFixed(1)),
+      humidity: Number(r.humidity.toFixed(1)),
+      timestamp: new Date(r.recordedAt).getTime()
     }));
+  }
+
+  const sorted = [...readings].sort(
+    (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
+  );
+
+  const startTime = new Date(sorted[0].recordedAt).getTime();
+  const endTime = new Date(sorted[sorted.length - 1].recordedAt).getTime();
+  const interval = (endTime - startTime) / targetPoints;
+
+  const resampled = [];
+  let currentIndex = 0;
+
+  for (let i = 0; i < targetPoints; i++) {
+    const bucketStart = startTime + i * interval;
+    const bucketEnd = bucketStart + interval;
+    const bucketReadings = [];
+
+    while (
+      currentIndex < sorted.length &&
+      new Date(sorted[currentIndex].recordedAt).getTime() < bucketEnd
+    ) {
+      bucketReadings.push(sorted[currentIndex]);
+      currentIndex++;
+    }
+
+    if (bucketReadings.length > 0) {
+      const avgTemp =
+        bucketReadings.reduce((sum, r) => sum + r.temperature, 0) / bucketReadings.length;
+      const avgHum =
+        bucketReadings.reduce((sum, r) => sum + r.humidity, 0) / bucketReadings.length;
+      const midTimestamp = Math.floor((bucketStart + bucketEnd) / 2);
+
+      resampled.push({
+        timestamp: midTimestamp,
+        temperature: Number(avgTemp.toFixed(1)),
+        humidity: Number(avgHum.toFixed(1)),
+        count: bucketReadings.length
+      });
+    }
+  }
+
+  return resampled;
+}
+
+export function TempHistoryChart({ readings, fridge, selectedRange }) {
+  // Re-muestreo inteligente uniforme a 180 puntos
+  const data = useMemo(() => {
+    return resampleReadings(readings, 180);
   }, [readings]);
 
-  // Dominio temporal para fijar los límites del eje X en la ventana seleccionada
+  // Eje X desde 00:00 hasta 24:00 fijado según la fecha pedida
   const xDomain = useMemo(() => {
     if (selectedRange?.from && selectedRange?.to) {
       return [new Date(selectedRange.from).getTime(), new Date(selectedRange.to).getTime()];
@@ -93,13 +131,13 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h', select
     <div className="chart-shell">
       <div className="section-heading">
         <div>
-          <span className="brand-kicker">Histórico</span>
+          <span className="brand-kicker">Histórico continuo</span>
           <h3>Temperatura y humedad</h3>
         </div>
         <p>
           {data.length > 0
-            ? `${data.length.toLocaleString('es-CL')} lecturas ordenadas cronológicamente`
-            : 'No hay lecturas para mostrar en este rango'}
+            ? `${readings.length.toLocaleString('es-CL')} lecturas promediadas dinámicamente en ${data.length} puntos uniformes`
+            : 'No hay lecturas registradas para este día'}
         </p>
       </div>
 
@@ -114,7 +152,7 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h', select
                 type="number"
                 scale="time"
                 domain={xDomain}
-                tickFormatter={(ts) => formatTick(ts, rangePreset)}
+                tickFormatter={formatTick}
                 stroke="rgba(255,255,255,0.55)"
                 minTickGap={45}
               />
@@ -140,14 +178,20 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h', select
                   borderRadius: 12,
                   color: '#edf2ff'
                 }}
-                labelFormatter={(ts) => formatTick(ts, '7d')}
+                labelFormatter={(ts) =>
+                  new Intl.DateTimeFormat('es-CL', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    day: '2-digit',
+                    month: '2-digit'
+                  }).format(new Date(ts))
+                }
                 formatter={(val, name) => [
                   `${typeof val === 'number' ? val.toFixed(1) : val} ${name === 'Temperatura' ? '°C' : '%'}`,
                   name
                 ]}
               />
 
-              {/* Área Sombreada de Tolerancia Óptima de Temperatura */}
               {fridge?.tempMin !== undefined && fridge?.tempMax !== undefined ? (
                 <>
                   <ReferenceArea
@@ -195,7 +239,7 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h', select
             </LineChart>
           </ResponsiveContainer>
         ) : (
-          <div className="empty-chart">No hay datos para el rango seleccionado.</div>
+          <div className="empty-chart">No hay lecturas registradas para la fecha seleccionada.</div>
         )}
       </div>
     </div>

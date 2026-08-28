@@ -6,47 +6,20 @@ import { AlarmsList } from '../components/AlarmsList.jsx';
 import { ExportButtons } from '../components/ExportButtons.jsx';
 import { TempHistoryChart } from '../components/TempHistoryChart.jsx';
 
-const RANGE_PRESETS = [
-  { key: '6h', label: 'Últimas 6 horas' },
-  { key: '12h', label: 'Últimas 12 horas' },
-  { key: '24h', label: 'Últimas 24 horas' },
-  { key: '48h', label: 'Últimas 48 horas' },
-  { key: '7d', label: 'Últimos 7 días' },
-  { key: '30d', label: 'Últimos 30 días' },
-  { key: 'custom', label: 'Personalizado' }
-];
+function getDayRange(dateString) {
+  const baseDate = dateString ? new Date(dateString) : new Date();
+  
+  const from = new Date(baseDate);
+  from.setHours(0, 0, 0, 0);
 
-function getPresetRange(preset) {
-  const to = new Date();
-  const from = new Date(to);
+  const to = new Date(baseDate);
+  to.setHours(23, 59, 59, 999);
 
-  switch (preset) {
-    case '6h':
-      from.setHours(from.getHours() - 6);
-      break;
-    case '12h':
-      from.setHours(from.getHours() - 12);
-      break;
-    case '48h':
-      from.setHours(from.getHours() - 48);
-      break;
-    case '7d':
-      from.setDate(from.getDate() - 7);
-      break;
-    case '30d':
-      from.setDate(from.getDate() - 30);
-      break;
-    case '24h':
-    default:
-      from.setHours(from.getHours() - 24);
-      break;
-  }
-
-  return { from: from.toISOString(), to: to.toISOString() };
-}
-
-function formatDateInputValue(date) {
-  return new Date(date).toISOString().slice(0, 16);
+  return {
+    fromDate: from.toISOString().slice(0, 10),
+    from: from.toISOString(),
+    to: to.toISOString()
+  };
 }
 
 export default function FridgeDetailPage() {
@@ -56,10 +29,11 @@ export default function FridgeDetailPage() {
   const [readings, setReadings] = useState([]);
   const [stats, setStats] = useState(null);
   const [alarms, setAlarms] = useState([]);
-  const [rangePreset, setRangePreset] = useState('24h');
-  const [customFrom, setCustomFrom] = useState(() => formatDateInputValue(getPresetRange('24h').from));
-  const [customTo, setCustomTo] = useState(() => formatDateInputValue(getPresetRange('24h').to));
-  const [selectedRange, setSelectedRange] = useState(() => getPresetRange('24h'));
+  
+  // Por defecto el día de hoy
+  const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().slice(0, 10));
+  const selectedRange = useMemo(() => getDayRange(selectedDay), [selectedDay]);
+
   const [editForm, setEditForm] = useState({
     name: '',
     tempMin: '',
@@ -72,18 +46,23 @@ export default function FridgeDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const rangeLabel = useMemo(
-    () => RANGE_PRESETS.find((preset) => preset.key === rangePreset)?.label || 'Últimas 24 horas',
-    [rangePreset]
-  );
-
   const exportPrefix = useMemo(() => fridge?.name || `refrigerador-${id}`, [fridge, id]);
 
-  useEffect(() => {
-    if (rangePreset !== 'custom') {
-      setSelectedRange(getPresetRange(rangePreset));
-    }
-  }, [rangePreset]);
+  const isToday = useMemo(() => {
+    return selectedDay === new Date().toISOString().slice(0, 10);
+  }, [selectedDay]);
+
+  function handlePrevDay() {
+    const current = new Date(selectedDay + 'T00:00:00');
+    current.setDate(current.getDate() - 1);
+    setSelectedDay(current.toISOString().slice(0, 10));
+  }
+
+  function handleNextDay() {
+    const current = new Date(selectedDay + 'T00:00:00');
+    current.setDate(current.getDate() + 1);
+    setSelectedDay(current.toISOString().slice(0, 10));
+  }
 
   useEffect(() => {
     if (fridge) {
@@ -108,31 +87,19 @@ export default function FridgeDetailPage() {
         const queryFrom = selectedRange.from;
         const queryTo = selectedRange.to;
 
-        // Soporte amplio para 70,000 puntos
-        const limit = 70000;
-
         const [fridgeData, readingsData, statsData, alarmsData] = await Promise.all([
           apiRequest(`/fridges/${id}`),
           apiRequest(
-            `/fridges/${id}/readings?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}&limit=${limit}`
+            `/fridges/${id}/readings?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}&limit=70000`
           ),
           apiRequest(`/fridges/${id}/stats?from=${encodeURIComponent(queryFrom)}&to=${encodeURIComponent(queryTo)}`),
           apiRequest(`/alarms?status=all&fridgeId=${encodeURIComponent(id)}`)
         ]);
 
-        if (!isMounted) {
-          return;
-        }
-
-        const rawReadings = Array.isArray(readingsData?.readings) ? readingsData.readings : [];
-
-        // Orden cronológico explícito (pasado -> presente)
-        const sortedReadings = rawReadings.sort(
-          (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
-        );
+        if (!isMounted) return;
 
         setFridge(fridgeData);
-        setReadings(sortedReadings);
+        setReadings(Array.isArray(readingsData?.readings) ? readingsData.readings : []);
         setStats(statsData);
         setAlarms(Array.isArray(alarmsData) ? alarmsData : []);
       } catch (loadError) {
@@ -155,26 +122,6 @@ export default function FridgeDetailPage() {
     };
   }, [id, selectedRange]);
 
-  function handleCustomRangeSubmit(event) {
-    event.preventDefault();
-    setSelectedRange({
-      from: new Date(customFrom).toISOString(),
-      to: new Date(customTo).toISOString()
-    });
-  }
-
-  function handlePresetChange(event) {
-    const nextPreset = event.target.value;
-    setRangePreset(nextPreset);
-
-    if (nextPreset !== 'custom') {
-      const nextRange = getPresetRange(nextPreset);
-      setSelectedRange(nextRange);
-      setCustomFrom(formatDateInputValue(nextRange.from));
-      setCustomTo(formatDateInputValue(nextRange.to));
-    }
-  }
-
   async function handleFridgeUpdate(event) {
     event.preventDefault();
     setEditError('');
@@ -188,7 +135,7 @@ export default function FridgeDetailPage() {
       humMax: Number(editForm.humMax)
     };
 
-    if (!payload.name || [payload.tempMin, payload.tempMax, payload.humMin, payload.humMax].some((value) => Number.isNaN(value))) {
+    if (!payload.name || [payload.tempMin, payload.tempMax, payload.humMin, payload.humMax].some((v) => Number.isNaN(v))) {
       setEditError('Revisa nombre y rangos antes de guardar.');
       return;
     }
@@ -217,7 +164,7 @@ export default function FridgeDetailPage() {
         <div>
           <span className="brand-kicker">Detalle</span>
           <h2>{fridge?.name || `Refrigerador ${id}`}</h2>
-          <p>Histórico de temperatura y humedad para el rango {rangeLabel.toLowerCase()}.</p>
+          <p>Lecturas continuas de 00:00 a 24:00 horas.</p>
         </div>
 
         <div className="page-actions-stack">
@@ -242,69 +189,52 @@ export default function FridgeDetailPage() {
         </div>
       </div>
 
-      <div className="range-controls card-shell">
-        <label>
-          Rango
-          <select value={rangePreset} onChange={handlePresetChange}>
-            {RANGE_PRESETS.map((preset) => (
-              <option key={preset.key} value={preset.key}>
-                {preset.label}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {rangePreset === 'custom' ? (
-          <form className="custom-range-form" onSubmit={handleCustomRangeSubmit}>
-            <label>
-              Desde
-              <input
-                type="datetime-local"
-                value={customFrom}
-                onChange={(event) => setCustomFrom(event.target.value)}
-                required
-              />
-            </label>
-            <label>
-              Hasta
-              <input
-                type="datetime-local"
-                value={customTo}
-                onChange={(event) => setCustomTo(event.target.value)}
-                required
-              />
-            </label>
-            <button className="button button-secondary" type="submit">
-              Aplicar rango
-            </button>
-          </form>
-        ) : null}
+      {/* Navegador Seamless por días */}
+      <div className="range-controls card-shell" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <button className="button button-secondary" type="button" onClick={handlePrevDay}>
+          ← Día anterior
+        </button>
+        <input
+          type="date"
+          value={selectedDay}
+          onChange={(e) => e.target.value && setSelectedDay(e.target.value)}
+          style={{ background: '#08111f', color: '#fff', border: '1px solid rgba(255,255,255,0.2)', padding: '6px 12px', borderRadius: '8px' }}
+        />
+        <button
+          className="button button-secondary"
+          type="button"
+          onClick={handleNextDay}
+          disabled={isToday}
+        >
+          Día siguiente →
+        </button>
+        {isToday ? <span style={{ opacity: 0.6, fontSize: '0.85rem' }}>(Hoy)</span> : null}
       </div>
 
-      {isLoading ? <div className="route-state">Cargando historial...</div> : null}
+      {isLoading ? <div className="route-state">Cargando lecturas del día...</div> : null}
       {error ? <div className="state-card state-error">{error}</div> : null}
 
       {!isLoading && !error ? (
         <>
           <div className="stats-grid">
             <div className="state-card">
-              <span className="card-label">Temperatura</span>
+              <span className="card-label">Temperatura prom.</span>
               <strong>{stats?.temperature?.avg != null ? `${Number(stats.temperature.avg).toFixed(1)}°C` : '--'}</strong>
               <small>
                 Min {stats?.temperature?.min != null ? Number(stats.temperature.min).toFixed(1) : '--'} / Max {stats?.temperature?.max != null ? Number(stats.temperature.max).toFixed(1) : '--'}
               </small>
             </div>
             <div className="state-card">
-              <span className="card-label">Humedad</span>
+              <span className="card-label">Humedad prom.</span>
               <strong>{stats?.humidity?.avg != null ? `${Number(stats.humidity.avg).toFixed(1)}%` : '--'}</strong>
               <small>
                 Min {stats?.humidity?.min != null ? Number(stats.humidity.min).toFixed(1) : '--'} / Max {stats?.humidity?.max != null ? Number(stats.humidity.max).toFixed(1) : '--'}
               </small>
             </div>
             <div className="state-card">
-              <span className="card-label">Lecturas</span>
-              <strong>{readings.length}</strong>
-              <small>Registros en el período seleccionado</small>
+              <span className="card-label">Lecturas recibidas</span>
+              <strong>{readings.length.toLocaleString('es-CL')}</strong>
+              <small>Registros capturados hoy</small>
             </div>
           </div>
 
@@ -312,7 +242,6 @@ export default function FridgeDetailPage() {
             <TempHistoryChart
               readings={readings}
               fridge={fridge}
-              rangePreset={rangePreset}
               selectedRange={selectedRange}
             />
           </div>
