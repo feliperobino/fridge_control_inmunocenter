@@ -9,7 +9,7 @@ COPY prisma ./prisma
 COPY src ./src
 RUN npx prisma generate
 
-FROM node:20-alpine
+FROM node:20-alpine3.19
 RUN apk add --no-cache openssl
 WORKDIR /app
 
