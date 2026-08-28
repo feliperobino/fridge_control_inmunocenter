@@ -1,4 +1,4 @@
-import { sendReportEmail } from '../src/services/mailer.service.js';
+import { sendReportEmail } from '../services/mailer.service.js';
 
 try {
   const info = await sendReportEmail({
