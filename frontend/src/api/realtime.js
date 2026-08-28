@@ -30,12 +30,14 @@ function registerActivity() {
 function ensureConnection() {
   if (source) return;
 
-  const apiUrl = import.meta.env.VITE_API_URL || '';
+  const apiUrl = (import.meta.env.VITE_API_URL || '').replace(/\/api\/?$/, '');
   const token = localStorage.getItem('token');
 
+  // ✅ Ahora construye /api/events correctamente sin duplicar el prefijo
+  const endpoint = `${apiUrl}/api/events`;
   const url = token
-    ? `${apiUrl}/api/events?token=${encodeURIComponent(token)}`
-    : `${apiUrl}/api/events`;
+    ? `${endpoint}?token=${encodeURIComponent(token)}`
+    : endpoint;
 
   source = new EventSource(url);
 
@@ -69,7 +71,7 @@ function ensureConnection() {
   source.onerror = () => {
     // Si hay error de red, no cambiamos inmediatamente el estado visual 
     // a menos que venza el INACTIVITY_TIMEOUT_MS, o si la conexión se cierra.
-    if (source.readyState === EventSource.CLOSED) {
+    if (source && source.readyState === EventSource.CLOSED) {
       source = null; // Permitir reconexión limpia
     }
   };
