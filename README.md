@@ -303,6 +303,178 @@ respetar en todas las fases.
 * **Frontend:** React, React Router, CSS3 (CSS Modules / Custom Properties).
 * **Backend:** Node.js, Express, Cron Runner.
 * **Persistencia & Datos:** Base de datos relacional / Integración Modbus RTU/TCP.
+## 🗄️ Trabajo Futuro: Gestión de Espacio en Disco (Retención, Logs y Pruning)
+
+> **Contexto:** el VPS de producción (Vultr, `inmunocenter-vps`) tiene **25 GB SSD**
+> totales. Con la ingesta actual (4 sensores cada 30s) la tabla `Reading` crece a un
+> ritmo aproximado de **~14 MB/día (~5 GB/año)**, medido empíricamente en las primeras
+> 12h de operación. A ese ritmo el disco no es un problema inmediato, pero **sin
+> ninguna política de limpieza, tres cosas compiten por el mismo espacio de forma
+> indefinida**: los datos de `Reading`, las imágenes/logs de Docker, y los backups
+> automáticos de Vultr. Ninguna de las tres se autolimita sola. Esta sección documenta
+> qué falta implementar, por qué, y con qué prioridad.
+
+### 0. Por qué esto no es "auto-gestionado" por defecto
+
+Es un malentendido común (y peligroso) asumir que una base de datos funciona como un
+buffer circular donde el dato más viejo se pisa solo cuando se llena el disco. **Eso
+no pasa.** Lo que realmente ocurre si el disco se llena:
+
+- PostgreSQL empieza a rechazar `INSERT` (`could not extend file: No space left on
+  device`), y en el peor caso puede quedarse sin espacio para el WAL y rechazar
+  también transacciones de lectura.
+- El proceso de ingesta (`POST /api/ingest`) empieza a devolver 500 al TRB245, y se
+  pierden lecturas nuevas silenciosamente hasta que alguien interviene a mano.
+- Si el disco se llena a mitad de un checkpoint o de un `autovacuum`, Postgres puede
+  quedar en un estado que requiere intervención manual para levantar de nuevo.
+
+Por eso las tres piezas de abajo son necesarias: no para "ahorrar espacio" de forma
+prematura, sino para que el sistema se degrade de forma controlada y visible en vez
+de fallar en silencio.
+
+### 1. Retención y pruning de `Reading` (prioridad: media, no urgente)
+
+**Objetivo:** que la tabla de lecturas nunca crezca sin límite, sin perder capacidad
+de auditoría de cadena de frío.
+
+- Agregar `backend/src/services/retention.service.js` con un job `node-cron` diario
+  (reutilizando la infraestructura de cron que ya existe para `report-scheduler.service.js`)
+  que borre lecturas más viejas que un umbral configurable:
+
+  ```js
+  import cron from 'node-cron';
+  import { prisma } from '../config/db.js';
+
+  const RETENTION_MONTHS = Number(process.env.READING_RETENTION_MONTHS ?? 18);
+
+  cron.schedule('0 3 * * *', async () => {
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - RETENTION_MONTHS);
+
+    const { count } = await prisma.reading.deleteMany({
+      where: { timestamp: { lt: cutoff } },
+    });
+
+    logger.info(`[retention] borradas ${count} lecturas anteriores a ${cutoff.toISOString()}`);
+  });
+  ```
+
+- Exponer `READING_RETENTION_MONTHS` en `.env.example` y `config/env.js`.
+- **Pendiente de definición de negocio, no técnica:** confirmar si existe un
+  requisito normativo/sanitario de tiempo mínimo de conservación de registros de
+  temperatura (trazabilidad de insumos biológicos/vacunas) antes de fijar el valor
+  default. Hasta confirmar, usar 18-24 meses como default conservador.
+- **Antes de borrar, considerar archivado en frío:** en vez de un `DELETE`
+  destructivo, exportar el rango a borrar a CSV/Parquet comprimido (reutilizando
+  `export.service.js`) a un bucket S3-compatible (Vultr Object Storage) antes de
+  eliminarlo de Postgres. Mantiene la trazabilidad a costo mínimo sin inflar la BD
+  activa.
+- Correr `VACUUM ANALYZE "Reading";` después de cada corrida de borrado masivo (o
+  confiar en `autovacuum`, que Postgres tiene activado por defecto) para que el
+  espacio liberado por los `DELETE` se recicle a nivel de páginas en vez de quedar
+  fragmentado dentro del datafile.
+
+### 2. Logs de Docker sin límite (prioridad: alta, más urgente que lo anterior)
+
+**Este es, en la práctica, el riesgo de espacio más inmediato del stack actual** —
+más que el crecimiento de `Reading`. Por defecto, Docker usa el driver `json-file`
+**sin rotación**, así que los logs de cualquier container (`backend`, `postgres`,
+`frontend`/`nginx`) pueden crecer indefinidamente, especialmente si algo empieza a
+loguear en loop por un bug o una reconexión fallida del logger.
+
+- Agregar límites de rotación a **todos** los servicios en `docker-compose.prod.yml`:
+
+  ```yaml
+  services:
+    backend:
+      logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "5"
+    postgres:
+      logging:
+        driver: json-file
+        options:
+          max-size: "10m"
+          max-file: "5"
+    # aplicar el mismo bloque a frontend/nginx
+  ```
+
+  Esto acota cada servicio a 50 MB de logs como máximo (5 archivos × 10 MB), en vez
+  de sin límite.
+- Alternativa/complemento a nivel de sistema operativo: configurar rotación global
+  en `/etc/docker/daemon.json` como default para containers futuros:
+
+  ```json
+  {
+    "log-driver": "json-file",
+    "log-opts": { "max-size": "10m", "max-file": "5" }
+  }
+  ```
+
+  (requiere `systemctl restart docker`; no afecta containers ya corriendo, solo
+  nuevos — por eso conviene hacer ambas cosas: el `daemon.json` como red de
+  seguridad general, y el `docker-compose.prod.yml` explícito para este proyecto).
+
+### 3. Limpieza periódica de imágenes/capas de Docker (prioridad: media)
+
+Cada `docker compose up --build` en producción deja atrás imágenes intermedias y
+capas huérfanas de builds anteriores, que `docker system df` puede acumular con el
+tiempo sin que nadie las note.
+
+- Agregar un cron **a nivel de sistema operativo** (no de la app) semanal:
+
+  ```bash
+  # /etc/cron.weekly/docker-prune (chmod +x)
+  #!/bin/bash
+  docker image prune -af --filter "until=168h"   # imágenes sin usar de +7 días
+  docker container prune -f
+  docker builder prune -af --filter "until=168h"
+  ```
+
+  Deliberadamente **no** se incluye `docker volume prune`, para no arriesgar el
+  volumen de datos de Postgres por error humano/de script.
+
+### 4. Monitoreo proactivo de espacio en disco (prioridad: alta, es la red de seguridad)
+
+Independientemente de qué tan bien se ajusten los puntos 1-3, siempre conviene un
+aviso temprano en vez de descubrir el problema cuando el `INSERT` ya está fallando.
+
+- Cron semanal simple que alerte si el uso de disco supera un umbral (ajustar canal
+  de notificación real — email vía `mailer.service.js` que ya existe en el
+  backend, o un webhook de Telegram/Slack si se prefiere algo más inmediato):
+
+  ```bash
+  # /etc/cron.weekly/disk-alert
+  #!/bin/bash
+  UMBRAL=70
+  USO=$(df -h / | awk 'NR==2{print $5}' | tr -d '%')
+  if [ "$USO" -ge "$UMBRAL" ]; then
+    echo "Disco de inmunocenter-vps al ${USO}% (umbral ${UMBRAL}%)" | \
+      mail -s "⚠️ Alerta de disco - inmunocenter-vps" admin@dominio.com
+  fi
+  ```
+
+- A mediano plazo, considerar un endpoint interno `GET /api/admin/system-health`
+  (protegido con `role.middleware.js`, solo `admin`) que exponga `df`, tamaño de
+  `Reading` y fecha de la lectura más antigua conservada, visible desde el
+  dashboard — para que el estado de salud del disco no dependa únicamente de
+  revisar la VPS por SSH.
+
+### 5. Resumen de prioridad de implementación
+
+| # | Ítem | Prioridad | Por qué |
+|---|------|-----------|---------|
+| 2 | Rotación de logs de Docker | **Alta** | Es el riesgo de espacio más inmediato y silencioso; un bug de logging en loop puede llenar el disco en horas, no en años. |
+| 4 | Monitoreo/alerta de disco | **Alta** | Red de seguridad barata que cubre errores en cualquiera de los otros puntos. |
+| 3 | Pruning de imágenes Docker | Media | Se acumula con cada deploy, pero a un ritmo lento y predecible. |
+| 1 | Retención de `Reading` | Media | Al ritmo actual (~5 GB/año) da ~2 años de margen; no es urgente, pero sí conviene resolverlo con tiempo y con la política de archivado definida, no de apuro. |
+
+No implementar nada de esto todavía es una opción válida a corto plazo — el disco
+no está en riesgo inminente — pero **los puntos 2 y 4 son de bajo costo/alto
+retorno** y conviene priorizarlos antes que el pruning de la tabla `Reading` en sí.
+
 ## Licencia
 
 Uso interno / privado.
