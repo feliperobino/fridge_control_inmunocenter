@@ -8,6 +8,9 @@ import {
 } from './export.service.js';
 import { sendReportEmail } from './mailer.service.js';
 
+// HARDCODED TIMEZONE FOR CHILE
+const CHILE_TIMEZONE = 'America/Santiago';
+
 const scheduledJobs = new Map();
 
 function isEveryMinute(expressionParts) {
@@ -44,9 +47,10 @@ function getRangeForCronExpression(cronExpression, now = new Date()) {
   }
 
   if (isDaily(parts)) {
-    const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+    // Calculado en hora local en lugar de UTC
+    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const from = new Date(end);
-    from.setUTCDate(from.getUTCDate() - 1);
+    from.setDate(from.getDate() - 1);
     return { from, to: end };
   }
 
@@ -118,13 +122,13 @@ export async function reloadReportSchedules() {
   for (const schedule of schedules) {
     const job = cron.schedule(
       schedule.cronExpression,
-      () => {
+      async () => {
         executeReportSchedule(schedule).catch((error) => {
           // eslint-disable-next-line no-console
           console.error(`Report schedule ${schedule.id} failed`, error);
         });
       },
-      { timezone: env.timezone }
+      { timezone: CHILE_TIMEZONE }
     );
 
     scheduledJobs.set(schedule.id, job);
