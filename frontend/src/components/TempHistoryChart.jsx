@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   CartesianGrid,
   Line,
@@ -76,14 +76,41 @@ function resampleReadings(readings, targetPoints = 180) {
   return resampled;
 }
 
-export function TempHistoryChart({ readings, fridge, selectedRange, extremeStats }) {
-  // Estado para visibilidad de líneas
+export function TempHistoryChart({ readings, fridge, selectedRange, onExtremesCalculated }) {
   const [showTemp, setShowTemp] = useState(true);
   const [showHum, setShowHum] = useState(true);
 
+  // 1. Datos promediados para graficar
   const data = useMemo(() => {
     return resampleReadings(readings, 180);
   }, [readings]);
+
+  // 2. Extremos calculados estrictamente sobre la curva promediada (resilientes al ruido)
+  const smoothedExtremes = useMemo(() => {
+    if (!data || data.length === 0) return { tempMin: null, tempMax: null };
+
+    let min = Infinity;
+    let max = -Infinity;
+
+    data.forEach((d) => {
+      if (typeof d.temperature === 'number' && !Number.isNaN(d.temperature)) {
+        if (d.temperature < min) min = d.temperature;
+        if (d.temperature > max) max = d.temperature;
+      }
+    });
+
+    return {
+      tempMin: min !== Infinity ? min : null,
+      tempMax: max !== -Infinity ? max : null
+    };
+  }, [data]);
+
+  // Comunicar los valores suavizados al componente padre (FridgeDetailPage)
+  useEffect(() => {
+    if (onExtremesCalculated) {
+      onExtremesCalculated(smoothedExtremes);
+    }
+  }, [smoothedExtremes, onExtremesCalculated]);
 
   const xDomain = useMemo(() => {
     if (selectedRange?.from && selectedRange?.to) {
@@ -147,7 +174,6 @@ export function TempHistoryChart({ readings, fridge, selectedRange, extremeStats
           <h3>Temperatura y humedad</h3>
         </div>
         
-        {/* Selector de visibilidad de series */}
         <div style={{ display: 'flex', gap: '16px', fontSize: '0.9rem' }}>
           <label style={{ display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer', color: '#4dd7b7' }}>
             <input
@@ -225,26 +251,25 @@ export function TempHistoryChart({ readings, fridge, selectedRange, extremeStats
                 ]}
               />
 
-              {/* Rango óptimo del refrigerador */}
               {showTemp && fridge?.tempMin !== undefined && fridge?.tempMax !== undefined ? (
                 <ReferenceArea
                   yAxisId="left"
                   y1={fridge.tempMin}
                   y2={fridge.tempMax}
-                  fill="rgba(77, 215, 183, 0.05)"
+                  fill="rgba(77, 215, 183, 0.2)"
                   stroke="none"
                 />
               ) : null}
 
-              {/* Líneas horizontales con etiquetas para T_max y T_min registradas */}
-              {showTemp && extremeStats?.tempMax != null ? (
+              {/* Intersectan exactamente la cresta y valle de la curva suavizada */}
+              {showTemp && smoothedExtremes.tempMax != null ? (
                 <ReferenceLine
                   yAxisId="left"
-                  y={extremeStats.tempMax}
+                  y={smoothedExtremes.tempMax}
                   stroke="#ef4444"
                   strokeDasharray="5 5"
                   label={{
-                    value: `T_max: ${extremeStats.tempMax.toFixed(1)}°C`,
+                    value: `T_max: ${smoothedExtremes.tempMax.toFixed(1)}°C`,
                     fill: '#ef4444',
                     position: 'top',
                     fontSize: 12
@@ -252,14 +277,14 @@ export function TempHistoryChart({ readings, fridge, selectedRange, extremeStats
                 />
               ) : null}
 
-              {showTemp && extremeStats?.tempMin != null ? (
+              {showTemp && smoothedExtremes.tempMin != null ? (
                 <ReferenceLine
                   yAxisId="left"
-                  y={extremeStats.tempMin}
+                  y={smoothedExtremes.tempMin}
                   stroke="#3b82f6"
                   strokeDasharray="5 5"
                   label={{
-                    value: `T_min: ${extremeStats.tempMin.toFixed(1)}°C`,
+                    value: `T_min: ${smoothedExtremes.tempMin.toFixed(1)}°C`,
                     fill: '#3b82f6',
                     position: 'bottom',
                     fontSize: 12

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { apiRequest } from '../api/client.js';
 import { useAuth } from '../auth/AuthContext.jsx';
@@ -40,6 +40,9 @@ export default function FridgeDetailPage() {
   const [stats, setStats] = useState(null);
   const [alarms, setAlarms] = useState([]);
   
+  // Estado para capturar los extremos filtrados (suavizados) que calcula el gráfico
+  const [smoothedExtremes, setSmoothedExtremes] = useState({ tempMin: null, tempMax: null });
+
   const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().slice(0, 10));
   const selectedRange = useMemo(() => getDayRange(selectedDay), [selectedDay]);
 
@@ -61,6 +64,10 @@ export default function FridgeDetailPage() {
     return selectedDay === new Date().toISOString().slice(0, 10);
   }, [selectedDay]);
 
+  const handleExtremesCalculated = useCallback((extremes) => {
+    setSmoothedExtremes(extremes);
+  }, []);
+
   const analytics = useMemo(() => {
     if (!readings || readings.length === 0 || !fridge) {
       return {
@@ -68,9 +75,7 @@ export default function FridgeDetailPage() {
         tempOutTime: '--',
         humInPercent: '--',
         humOutTime: '--',
-        lastReadingTime: '--',
-        tempMin: null,
-        tempMax: null
+        lastReadingTime: '--'
       };
     }
 
@@ -81,13 +86,8 @@ export default function FridgeDetailPage() {
 
     let tempInCount = 0;
     let humInCount = 0;
-    let minTempRecorded = Infinity;
-    let maxTempRecorded = -Infinity;
 
     readings.forEach((r) => {
-      if (r.temperature < minTempRecorded) minTempRecorded = r.temperature;
-      if (r.temperature > maxTempRecorded) maxTempRecorded = r.temperature;
-
       if (r.temperature >= tempMinConfig && r.temperature <= tempMaxConfig) {
         tempInCount++;
       }
@@ -120,9 +120,7 @@ export default function FridgeDetailPage() {
       tempOutTime: formatDuration(tempOutMinutes),
       humInPercent: `${humInPercent}%`,
       humOutTime: formatDuration(humOutMinutes),
-      lastReadingTime,
-      tempMin: minTempRecorded !== Infinity ? minTempRecorded : null,
-      tempMax: maxTempRecorded !== -Infinity ? maxTempRecorded : null
+      lastReadingTime
     };
   }, [readings, fridge]);
 
@@ -289,7 +287,6 @@ export default function FridgeDetailPage() {
 
       {!isLoading && !error ? (
         <>
-          {/* Tarjetas horizontales (Temperatura, Extremos, Humedad, Última Lectura) */}
           <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
             
             {/* 1. Temperatura Promedio */}
@@ -303,15 +300,15 @@ export default function FridgeDetailPage() {
               </small>
             </div>
 
-            {/* 2. Tarjeta Extra: Temperatura Máxima / Mínima */}
+            {/* 2. Temperatura Máxima / Mínima (Valores suavizados) */}
             <div className="state-card">
               <span className="card-label">Temp Máxima / Mínima</span>
               <strong>
-                {analytics.tempMax != null ? `${analytics.tempMax.toFixed(1)}°C` : '--'}
+                {smoothedExtremes.tempMax != null ? `${smoothedExtremes.tempMax.toFixed(1)}°C` : '--'}
                 <span style={{ fontSize: '0.9rem', color: '#8f9bba', margin: '0 6px' }}>/</span>
-                {analytics.tempMin != null ? `${analytics.tempMin.toFixed(1)}°C` : '--'}
+                {smoothedExtremes.tempMin != null ? `${smoothedExtremes.tempMin.toFixed(1)}°C` : '--'}
               </strong>
-              <small>Puntos extremos en el día</small>
+              <small>Calculados sobre la curva promediada</small>
             </div>
 
             {/* 3. Humedad Promedio */}
@@ -339,7 +336,7 @@ export default function FridgeDetailPage() {
               readings={readings}
               fridge={fridge}
               selectedRange={selectedRange}
-              extremeStats={{ tempMin: analytics.tempMin, tempMax: analytics.tempMax }}
+              onExtremesCalculated={handleExtremesCalculated}
             />
           </div>
 
