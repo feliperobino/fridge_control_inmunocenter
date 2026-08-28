@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import prisma from '../config/prisma.js';
-import env from '../config/env.js';
+
 import {
   exportReadingsToCsv,
   exportReadingsToPdf,
