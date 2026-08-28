@@ -49,9 +49,19 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
     data: { fridgeId: fridge.id, temperature, humidity, recordedAt, receivedAt }
   });
 
+  // REFACTOR NO QUERY HISTÓRICO - QUERY SOLO LOS ÚLTIMOS 2 HORAS PARA EVALUAR ALARMAS
+  const LOOKBACK_HOURS = 2;
+  const windowStart = new Date(recordedAt.getTime() - LOOKBACK_HOURS * 60 * 60 * 1000);
+
   const [readings, openAlarmEvents] = await Promise.all([
     prisma.reading.findMany({
-      where: { fridgeId: fridge.id, recordedAt: { lte: recordedAt } },
+      where: { 
+        fridgeId: fridge.id, 
+        recordedAt: { 
+          gte: windowStart, // SOLUCIÓN: Acota el inicio de la búsqueda
+          lte: recordedAt 
+        } 
+      },
       orderBy: { recordedAt: 'asc' }
     }),
     prisma.alarmEvent.findMany({
