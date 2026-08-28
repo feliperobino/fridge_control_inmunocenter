@@ -15,7 +15,7 @@ export const env = {
   smtpSecure: process.env.SMTP_SECURE === 'true',
   smtpFrom: process.env.SMTP_FROM || 'no-reply@fridge-monitor.local',
   timezone: process.env.TZ || 'UTC',
-  readingRetentionMonths: Number(process.env.READING_RETENTION_MONTHS || 24) // <-- Agregado
+  readingRetentionMonths: Number(process.env.READING_RETENTION_MONTHS || 24) // <-- 2 años de logs hacia atrás
 };
 
 export default env;

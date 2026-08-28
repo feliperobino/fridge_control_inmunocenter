@@ -2,7 +2,7 @@ import { Navigate, Outlet, useLocation } from 'react-router-dom';
 import { useAuth } from './AuthContext.jsx';
 
 export function ProtectedRoute({ children, allowedRoles }) {
-  const { isLoading, user } = useAuth();
+  const { isLoading, user, hasRole } = useAuth();
   const location = useLocation();
 
   if (isLoading) {
@@ -13,7 +13,8 @@ export function ProtectedRoute({ children, allowedRoles }) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
+  if (allowedRoles && !hasRole(allowedRoles)) {
+    // Redirección silenciosa a dashboard sin pantalla de error 403
     return <Navigate to="/dashboard" replace />;
   }
 

@@ -4,11 +4,12 @@ import { useAuth } from '../auth/AuthContext.jsx';
 const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
   { to: '/alarms', label: 'Alarmas' },
-  { to: '/reports', label: 'Reportes' }
+  { to: '/reports', label: 'Reportes' },
+  { to: '/users', label: 'Usuarios', roles: ['ADMIN'] } // Ocultamiento silencioso por rol
 ];
 
 export function Layout() {
-  const { logout, user } = useAuth();
+  const { logout, user, hasRole } = useAuth();
   const [searchParams] = useSearchParams();
   const isKiosk = searchParams.get('fullscreen') === '1' || window.location.pathname === '/dashboard/kiosk';
 
@@ -21,6 +22,11 @@ export function Layout() {
     );
   }
 
+  // Filtrado silencioso de navegación según permisos/roles
+  const visibleNavItems = navItems.filter(
+    (item) => !item.roles || hasRole(item.roles)
+  );
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -31,7 +37,7 @@ export function Layout() {
         </div>
 
         <nav className="nav-links">
-          {navItems.map((item) => (
+          {visibleNavItems.map((item) => (
             <NavLink
               key={item.to}
               to={item.to}
@@ -40,15 +46,6 @@ export function Layout() {
               {item.label}
             </NavLink>
           ))}
-
-          {user?.role === 'ADMIN' ? (
-            <NavLink
-              to="/users"
-              className={({ isActive }) => `nav-link${isActive ? ' is-active' : ''}`}
-            >
-              Usuarios
-            </NavLink>
-          ) : null}
         </nav>
       </aside>
 
