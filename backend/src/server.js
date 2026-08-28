@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import app from './app.js';
 import { reloadReportSchedules } from './services/report-scheduler.service.js';
+import { initRetentionScheduler } from './services/retention.service.js'; // <-- Importado
 import prisma from './config/prisma.js';
 
 const PORT = process.env.PORT || 3000;
@@ -19,10 +20,14 @@ async function start() {
   app.listen(PORT, () => {
     // eslint-disable-next-line no-console
     console.log(`Backend listening on http://localhost:${PORT}`);
+    
+    // Inicializar crons
     reloadReportSchedules().catch((error) => {
       // eslint-disable-next-line no-console
       console.error('Failed to load report schedules', error);
     });
+
+    initRetentionScheduler(); // <-- Inicializado
   });
 }
 
