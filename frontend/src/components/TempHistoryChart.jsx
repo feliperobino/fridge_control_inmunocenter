@@ -17,7 +17,6 @@ function formatTick(timestamp, rangePreset) {
     return timestamp;
   }
 
-  // Si el rango cubre varios días, incluimos día/mes
   if (rangePreset === '7d' || rangePreset === '30d') {
     return new Intl.DateTimeFormat('es-CL', {
       day: '2-digit',
@@ -27,22 +26,33 @@ function formatTick(timestamp, rangePreset) {
     }).format(date);
   }
 
-  // Para ventanas de horas (6h, 12h, 24h, 48h)
+  // Formato de hora en 24h (HH:mm) para ver la franja horaria clara (ej. 02:00, 08:00, 14:00, 20:00)
   return new Intl.DateTimeFormat('es-CL', {
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    hour12: false
   }).format(date);
 }
 
-export function TempHistoryChart({ readings, fridge, rangePreset = '24h' }) {
+export function TempHistoryChart({ readings, fridge, rangePreset = '24h', selectedRange }) {
+  // Redondeo de decimales y mapeo de tiempos a timestamps numéricos
   const data = useMemo(() => {
     return (readings || []).map((reading) => ({
       ...reading,
+      temperature: typeof reading.temperature === 'number' ? Number(reading.temperature.toFixed(1)) : reading.temperature,
+      humidity: typeof reading.humidity === 'number' ? Number(reading.humidity.toFixed(1)) : reading.humidity,
       timestamp: new Date(reading.recordedAt).getTime()
     }));
   }, [readings]);
 
-  // Cálculo de dominios para los ejes Y con márgenes
+  // Dominio temporal para fijar los límites del eje X en la ventana seleccionada
+  const xDomain = useMemo(() => {
+    if (selectedRange?.from && selectedRange?.to) {
+      return [new Date(selectedRange.from).getTime(), new Date(selectedRange.to).getTime()];
+    }
+    return ['dataMin', 'dataMax'];
+  }, [selectedRange]);
+
   const tempDomain = useMemo(() => {
     if (!fridge) return ['auto', 'auto'];
     const minConfig = Number(fridge.tempMin) ?? 2;
@@ -88,14 +98,14 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h' }) {
         </div>
         <p>
           {data.length > 0
-            ? `${data.length} lecturas ordenadas cronológicamente`
+            ? `${data.length.toLocaleString('es-CL')} lecturas ordenadas cronológicamente`
             : 'No hay lecturas para mostrar en este rango'}
         </p>
       </div>
 
       <div className="chart-frame">
         {data.length > 0 ? (
-          <ResponsiveContainer width="100%" height={360}>
+          <ResponsiveContainer width="100%" height={380}>
             <LineChart data={data} margin={{ top: 16, right: 24, left: 0, bottom: 12 }}>
               <CartesianGrid stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
               
@@ -103,10 +113,10 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h' }) {
                 dataKey="timestamp"
                 type="number"
                 scale="time"
-                domain={['dataMin', 'dataMax']}
+                domain={xDomain}
                 tickFormatter={(ts) => formatTick(ts, rangePreset)}
                 stroke="rgba(255,255,255,0.55)"
-                minTickGap={30}
+                minTickGap={45}
               />
               
               <YAxis
@@ -132,12 +142,12 @@ export function TempHistoryChart({ readings, fridge, rangePreset = '24h' }) {
                 }}
                 labelFormatter={(ts) => formatTick(ts, '7d')}
                 formatter={(val, name) => [
-                  `${val} ${name === 'Temperatura' ? '°C' : '%'}`,
+                  `${typeof val === 'number' ? val.toFixed(1) : val} ${name === 'Temperatura' ? '°C' : '%'}`,
                   name
                 ]}
               />
 
-              {/* Bandas de tolerancia visual para la Temperatura Óptima */}
+              {/* Área Sombreada de Tolerancia Óptima de Temperatura */}
               {fridge?.tempMin !== undefined && fridge?.tempMax !== undefined ? (
                 <>
                   <ReferenceArea

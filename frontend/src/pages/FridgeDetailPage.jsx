@@ -108,10 +108,8 @@ export default function FridgeDetailPage() {
         const queryFrom = selectedRange.from;
         const queryTo = selectedRange.to;
 
-        // Determinamos el límite de lecturas según la ventana
-        let limit = 2000;
-        if (rangePreset === '7d') limit = 4000;
-        if (rangePreset === '30d') limit = 8000;
+        // Soporte amplio para 70,000 puntos
+        const limit = 70000;
 
         const [fridgeData, readingsData, statsData, alarmsData] = await Promise.all([
           apiRequest(`/fridges/${id}`),
@@ -127,8 +125,8 @@ export default function FridgeDetailPage() {
         }
 
         const rawReadings = Array.isArray(readingsData?.readings) ? readingsData.readings : [];
-        
-        // Garantizamos orden cronológico ascendente (pasado -> presente)
+
+        // Orden cronológico explícito (pasado -> presente)
         const sortedReadings = rawReadings.sort(
           (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
         );
@@ -155,7 +153,7 @@ export default function FridgeDetailPage() {
     return () => {
       isMounted = false;
     };
-  }, [id, selectedRange, rangePreset]);
+  }, [id, selectedRange]);
 
   function handleCustomRangeSubmit(event) {
     event.preventDefault();
@@ -291,16 +289,16 @@ export default function FridgeDetailPage() {
           <div className="stats-grid">
             <div className="state-card">
               <span className="card-label">Temperatura</span>
-              <strong>{stats ? `${stats.temperature.avg ?? '--'}°C` : '--'}</strong>
+              <strong>{stats?.temperature?.avg != null ? `${Number(stats.temperature.avg).toFixed(1)}°C` : '--'}</strong>
               <small>
-                Min {stats?.temperature?.min ?? '--'} / Max {stats?.temperature?.max ?? '--'}
+                Min {stats?.temperature?.min != null ? Number(stats.temperature.min).toFixed(1) : '--'} / Max {stats?.temperature?.max != null ? Number(stats.temperature.max).toFixed(1) : '--'}
               </small>
             </div>
             <div className="state-card">
               <span className="card-label">Humedad</span>
-              <strong>{stats ? `${stats.humidity.avg ?? '--'}%` : '--'}</strong>
+              <strong>{stats?.humidity?.avg != null ? `${Number(stats.humidity.avg).toFixed(1)}%` : '--'}</strong>
               <small>
-                Min {stats?.humidity?.min ?? '--'} / Max {stats?.humidity?.max ?? '--'}
+                Min {stats?.humidity?.min != null ? Number(stats.humidity.min).toFixed(1) : '--'} / Max {stats?.humidity?.max != null ? Number(stats.humidity.max).toFixed(1) : '--'}
               </small>
             </div>
             <div className="state-card">
@@ -311,7 +309,12 @@ export default function FridgeDetailPage() {
           </div>
 
           <div className="card-shell">
-            <TempHistoryChart readings={readings} fridge={fridge} rangePreset={rangePreset} />
+            <TempHistoryChart
+              readings={readings}
+              fridge={fridge}
+              rangePreset={rangePreset}
+              selectedRange={selectedRange}
+            />
           </div>
 
           <div className="card-shell">
