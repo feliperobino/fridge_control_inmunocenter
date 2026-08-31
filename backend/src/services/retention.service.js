@@ -9,9 +9,17 @@ export function initRetentionScheduler() {
   // Se ejecuta todos los días a las 3:00 AM ('0 3 * * *')
   cron.schedule('0 3 * * *', async () => {
     try {
-      const retentionMonths = env.readingRetentionMonths;
+      // Forzar parseo a entero con valor por defecto de resguardo (6 meses)
+      const retentionMonths = parseInt(env.readingRetentionMonths, 10) || 6;
+      
       const cutoffDate = new Date();
       cutoffDate.setMonth(cutoffDate.getMonth() - retentionMonths);
+
+      // Verificación de seguridad para evitar "Invalid Date"
+      if (isNaN(cutoffDate.getTime())) {
+        console.error('[retention] La fecha límite calculada no es válida. Proceso abortado.');
+        return;
+      }
 
       const result = await prisma.reading.deleteMany({
         where: {
@@ -21,14 +29,12 @@ export function initRetentionScheduler() {
         },
       });
 
-      // eslint-disable-next-line no-console
       console.log(`[retention] Borradas ${result.count} lecturas anteriores a ${cutoffDate.toISOString()}`);
     } catch (error) {
-      // eslint-disable-next-line no-console
       console.error('[retention] Error durante el proceso de limpieza de lecturas:', error);
     }
   });
 
-  // eslint-disable-next-line no-console
-  console.log(`Retention scheduler initialized (Retención: ${env.readingRetentionMonths} meses)`);
+  const parsedMonths = parseInt(env.readingRetentionMonths, 10) || 6;
+  console.log(`Retention scheduler initialized (Retención: ${parsedMonths} meses)`);
 }
