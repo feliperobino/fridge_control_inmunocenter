@@ -5,22 +5,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 import { AlarmsList } from '../components/AlarmsList.jsx';
 import { ExportButtons } from '../components/ExportButtons.jsx';
 import { TempHistoryChart } from '../components/TempHistoryChart.jsx';
-
-function getDayRange(dateString) {
-  const baseDate = dateString ? new Date(dateString) : new Date();
-  
-  const from = new Date(baseDate);
-  from.setHours(0, 0, 0, 0);
-
-  const to = new Date(baseDate);
-  to.setHours(23, 59, 59, 999);
-
-  return {
-    fromDate: from.toISOString().slice(0, 10),
-    from: from.toISOString(),
-    to: to.toISOString()
-  };
-}
+import { getLocalDateString, getLocalDayRange, shiftLocalDate } from '../utils/date-range.js';
 
 function formatDuration(minutes) {
   if (minutes <= 0) return '0m';
@@ -43,8 +28,8 @@ export default function FridgeDetailPage() {
   // Estado para capturar los extremos filtrados (suavizados) que calcula el gráfico
   const [smoothedExtremes, setSmoothedExtremes] = useState({ tempMin: null, tempMax: null });
 
-  const [selectedDay, setSelectedDay] = useState(() => new Date().toISOString().slice(0, 10));
-  const selectedRange = useMemo(() => getDayRange(selectedDay), [selectedDay]);
+  const [selectedDay, setSelectedDay] = useState(() => getLocalDateString());
+  const selectedRange = useMemo(() => getLocalDayRange(selectedDay), [selectedDay]);
 
   const [editForm, setEditForm] = useState({
     name: '',
@@ -61,7 +46,7 @@ export default function FridgeDetailPage() {
   const exportPrefix = useMemo(() => fridge?.name || `refrigerador-${id}`, [fridge, id]);
 
   const isToday = useMemo(() => {
-    return selectedDay === new Date().toISOString().slice(0, 10);
+    return selectedDay === getLocalDateString();
   }, [selectedDay]);
 
   const handleExtremesCalculated = useCallback((extremes) => {
@@ -125,15 +110,11 @@ export default function FridgeDetailPage() {
   }, [readings, fridge]);
 
   function handlePrevDay() {
-    const current = new Date(selectedDay + 'T00:00:00');
-    current.setDate(current.getDate() - 1);
-    setSelectedDay(current.toISOString().slice(0, 10));
+    setSelectedDay(shiftLocalDate(selectedDay, -1));
   }
 
   function handleNextDay() {
-    const current = new Date(selectedDay + 'T00:00:00');
-    current.setDate(current.getDate() + 1);
-    setSelectedDay(current.toISOString().slice(0, 10));
+    setSelectedDay(shiftLocalDate(selectedDay, 1));
   }
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getFridgeReadings, updateFridge } from '../api/fridges.js';
 import { subscribeToReadingsUpdated } from '../api/realtime.js';
+import { getLocalDateString, getLocalDayRange, shiftLocalDate } from '../utils/date-range.js';
 
 function formatTime(isoString) {
   if (!isoString) return null;
@@ -57,10 +58,8 @@ export function FridgeCard({ fridge, onClick }) {
       if (!silent) setStats(null);
 
       try {
-        const date = new Date();
-        date.setDate(date.getDate() - dayOffset);
-        const from = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0).toISOString();
-        const to = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59).toISOString();
+        const dateString = shiftLocalDate(getLocalDateString(), -dayOffset);
+        const { from, to } = getLocalDayRange(dateString);
 
         const resp = await getFridgeReadings(fridge.id, from, to, 10000);
         const readings = Array.isArray(resp?.readings) ? resp.readings : [];
@@ -91,10 +90,11 @@ export function FridgeCard({ fridge, onClick }) {
         }
 
         // compute morning/afternoon min/max
-        const morningStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0).getTime();
-        const morningEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 11, 59, 59).getTime();
-        const afterStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0, 0).getTime();
-        const afterEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59).getTime();
+        const dayStartDate = new Date(from);
+        const morningStart = dayStartDate.getTime();
+        const morningEnd = new Date(dayStartDate).setHours(11, 59, 59, 999);
+        const afterStart = new Date(dayStartDate).setHours(12, 0, 0, 0);
+        const afterEnd = new Date(dayStartDate).setHours(23, 59, 59, 999);
 
         let morningMin = null;
         let morningMax = null;
