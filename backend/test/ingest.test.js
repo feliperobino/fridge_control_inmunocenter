@@ -3,6 +3,8 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import prisma from '../src/config/prisma.js';
 import env from '../src/config/env.js';
 import app from '../src/app.js';
+import { resolveRecordedAt } from '../src/controllers/ingest.controller.js';
+import { parseLoggerLocalDate } from '../src/utils/ingest-date.js';
 
 const testFridge = {
   name: 'Phase 3 Test Fridge',
@@ -46,6 +48,11 @@ afterAll(async () => {
 });
 
 describe('POST /api/ingest', () => {
+  it('interprets logger local timestamps in the configured timezone', () => {
+    expect(resolveRecordedAt({ D: '02/09/2026 00:00:17' }).toISOString()).toBe('2026-09-02T04:00:17.000Z');
+    expect(parseLoggerLocalDate('31/02/2026 00:00:17', env.ingestTimezone)).toBeNull();
+  });
+
   it('rejects requests without a valid API key', async () => {
     await request(app)
       .post('/api/ingest')

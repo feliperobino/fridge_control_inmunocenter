@@ -3,6 +3,8 @@ import prisma from '../config/prisma.js';
 import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js';
 
 import { pushSample } from '../services/reading_buffer.service.js';
+import env from '../config/env.js';
+import { parseLoggerLocalDate } from '../utils/ingest-date.js';
 import {
   emitAlarmsResolved,
   emitAlarmsTriggered,
@@ -26,14 +28,10 @@ function extractSlaveId(requestName) {
   return match ? Number(match[1]) : null;
 }
 
-function resolveRecordedAt(item) {
+export function resolveRecordedAt(item) {
   if (item.D) {
-    const localDateMatch = item.D.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
-    if (localDateMatch) {
-      const [, day, month, year, hours, minutes, seconds] = localDateMatch;
-      const parsedLocalDate = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}`);
-      if (!Number.isNaN(parsedLocalDate.getTime())) return parsedLocalDate;
-    }
+    const parsedLocalDate = parseLoggerLocalDate(item.D, env.ingestTimezone);
+    if (parsedLocalDate) return parsedLocalDate;
 
     const d = new Date(item.D);
     if (!Number.isNaN(d.getTime())) return d;

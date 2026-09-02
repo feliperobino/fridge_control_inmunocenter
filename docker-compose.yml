@@ -15,6 +15,8 @@ services:
     working_dir: /app
     environment:
       PORT: 3000
+      TZ: America/Santiago
+      INGEST_TIMEZONE: America/Santiago
       DATABASE_URL: postgresql://fridge:fridge@postgres:5432/fridge_monitor?schema=public
       JWT_ACCESS_SECRET: dev-access-secret
       JWT_REFRESH_SECRET: dev-refresh-secret
