@@ -12,13 +12,19 @@ function isWithinRange(fridge, reading) {
   return tempOk && humOk;
 }
 
-export function FridgeTile({ fridge }) {
+export function FridgeTile({ fridge, hasConfirmedAlarm = false }) {
   const latestReading = fridge?.latestReading || null;
   const hasData = Boolean(latestReading?.recordedAt);
   const isHealthy = hasData ? isWithinRange(fridge, latestReading) : false;
-  const statusLabel = !hasData ? 'SIN DATOS' : isHealthy ? 'EN RANGO' : 'ALERTA';
+  const statusLabel = !hasData
+    ? 'SIN DATOS'
+    : hasConfirmedAlarm
+      ? 'ALARMA CONFIRMADA'
+      : isHealthy
+        ? 'EN RANGO'
+        : 'FUERA DE RANGO';
 
-  const statusClass = !hasData ? 'kiosk-neutral' : isHealthy ? 'kiosk-ok' : 'kiosk-alert';
+  const statusClass = !hasData ? 'kiosk-neutral' : hasConfirmedAlarm ? 'kiosk-critical' : isHealthy ? 'kiosk-ok' : 'kiosk-alert';
 
   return (
     <div className={`fridge-tile ${statusClass}`}>

@@ -1,5 +1,7 @@
 let source = null;
 const listeners = new Set();
+const alarmListeners = new Set();
+const alarmResolvedListeners = new Set();
 const statusListeners = new Set();
 
 let connectionStatus = 'DISCONNECTED'; // 'CONNECTED' | 'DISCONNECTED'
@@ -25,6 +27,14 @@ function registerActivity() {
   activityTimer = setTimeout(() => {
     setStatus('DISCONNECTED');
   }, INACTIVITY_TIMEOUT_MS);
+}
+
+function parseEventData(event) {
+  try {
+    return JSON.parse(event.data);
+  } catch {
+    return null;
+  }
 }
 
 function ensureConnection() {
@@ -54,13 +64,20 @@ function ensureConnection() {
   // Evento de nuevas lecturas
   source.addEventListener('readings-updated', (event) => {
     registerActivity();
-    let detail = null;
-    try {
-      detail = JSON.parse(event.data);
-    } catch {
-      // payload no crítico
-    }
+    const detail = parseEventData(event);
     listeners.forEach((cb) => cb(detail));
+  });
+
+  source.addEventListener('alarms-triggered', (event) => {
+    registerActivity();
+    const detail = parseEventData(event);
+    if (detail) alarmListeners.forEach((cb) => cb(detail));
+  });
+
+  source.addEventListener('alarms-resolved', (event) => {
+    registerActivity();
+    const detail = parseEventData(event);
+    if (detail) alarmResolvedListeners.forEach((cb) => cb(detail));
   });
 
   // Pings del heartbeat
@@ -81,6 +98,18 @@ export function subscribeToReadingsUpdated(callback) {
   ensureConnection();
   listeners.add(callback);
   return () => listeners.delete(callback);
+}
+
+export function subscribeToAlarmsTriggered(callback) {
+  ensureConnection();
+  alarmListeners.add(callback);
+  return () => alarmListeners.delete(callback);
+}
+
+export function subscribeToAlarmsResolved(callback) {
+  ensureConnection();
+  alarmResolvedListeners.add(callback);
+  return () => alarmResolvedListeners.delete(callback);
 }
 
 export function subscribeToRealtimeStatus(callback) {

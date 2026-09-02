@@ -3,7 +3,11 @@ import prisma from '../config/prisma.js';
 import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js';
 
 import { pushSample } from '../services/reading_buffer.service.js';
-import { emitReadingsUpdated } from '../services/realtime.service.js';
+import {
+  emitAlarmsResolved,
+  emitAlarmsTriggered,
+  emitReadingsUpdated
+} from '../services/realtime.service.js';
 
 const DATA_KEY = 'modbus_temp_RH';
 const SCALE = 10; // XY-MD02 manda valores x10 (211 = 21.1)
@@ -76,25 +80,46 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
     now: receivedAt
   });
 
-  await Promise.all([
-    ...alarmTransitions.create.map((alarmEvent) =>
-      prisma.alarmEvent.create({
-        data: {
-          fridgeId: fridge.id,
-          type: alarmEvent.type,
-          startedAt: new Date(alarmEvent.startedAt)
-        }
-      })
+  const [createdAlarms, resolvedAlarms] = await Promise.all([
+    Promise.all(
+      alarmTransitions.create.map((alarmEvent) =>
+        prisma.alarmEvent.create({
+          data: {
+            fridgeId: fridge.id,
+            type: alarmEvent.type,
+            startedAt: new Date(alarmEvent.startedAt)
+          }
+        })
+      )
     ),
-    ...alarmTransitions.close.map((alarmEvent) =>
-      prisma.alarmEvent.update({
-        where: { id: alarmEvent.id },
-        data: { resolvedAt: new Date(alarmEvent.resolvedAt) }
-      })
+    Promise.all(
+      alarmTransitions.close.map((alarmEvent) =>
+        prisma.alarmEvent.update({
+          where: { id: alarmEvent.id },
+          data: { resolvedAt: new Date(alarmEvent.resolvedAt) }
+        })
+      )
     )
   ]);
 
-  return { fridgeId: fridge.id, readingId: reading.id };
+  const alarmContext = {
+    fridgeId: fridge.id,
+    fridgeName: fridge.name,
+    location: fridge.location,
+    temperature: reading.temperature,
+    humidity: reading.humidity,
+    tempMin: fridge.tempMin,
+    tempMax: fridge.tempMax,
+    humMin: fridge.humMin,
+    humMax: fridge.humMax
+  };
+
+  return {
+    fridgeId: fridge.id,
+    readingId: reading.id,
+    createdAlarms: createdAlarms.map((alarm) => ({ ...alarm, ...alarmContext })),
+    resolvedAlarms: resolvedAlarms.map((alarm) => ({ ...alarm, ...alarmContext }))
+  };
 }
 
 export async function ingest(req, res) {
@@ -140,6 +165,17 @@ export async function ingest(req, res) {
   // Un solo emit por request procesado (una ráfaga), no uno por item del batch.
   if (processed.length > 0) {
     emitReadingsUpdated(processed.map((p) => p.fridgeId));
+
+    const createdAlarms = processed.flatMap((result) => result.createdAlarms || []);
+    const resolvedAlarms = processed.flatMap((result) => result.resolvedAlarms || []);
+
+    if (createdAlarms.length > 0) {
+      emitAlarmsTriggered(createdAlarms);
+    }
+
+    if (resolvedAlarms.length > 0) {
+      emitAlarmsResolved(resolvedAlarms);
+    }
   }
 
   return res.status(201).json({ processed, failed });

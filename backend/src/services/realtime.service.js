@@ -17,3 +17,17 @@ export function emitReadingsUpdated(fridgeIds) {
     at: new Date().toISOString()
   });
 }
+
+export function emitAlarmsTriggered(alarms) {
+  realtimeBus.emit('alarms-triggered', {
+    alarms,
+    at: new Date().toISOString()
+  });
+}
+
+export function emitAlarmsResolved(alarms) {
+  realtimeBus.emit('alarms-resolved', {
+    alarms,
+    at: new Date().toISOString()
+  });
+}

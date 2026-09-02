@@ -18,6 +18,19 @@ export async function listAlarms(req, res) {
 
   const alarms = await prisma.alarmEvent.findMany({
     where,
+    include: {
+      fridge: {
+        select: {
+          id: true,
+          name: true,
+          location: true,
+          tempMin: true,
+          tempMax: true,
+          humMin: true,
+          humMax: true
+        }
+      }
+    },
     orderBy: { createdAt: 'desc' }
   });
 

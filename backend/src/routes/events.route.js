@@ -31,7 +31,11 @@ router.get('/events', (req, res) => {
   send('connected', { ok: true });
 
   const onUpdate = (payload) => send('readings-updated', payload);
+  const onAlarmsTriggered = (payload) => send('alarms-triggered', payload);
+  const onAlarmsResolved = (payload) => send('alarms-resolved', payload);
   realtimeBus.on('readings-updated', onUpdate);
+  realtimeBus.on('alarms-triggered', onAlarmsTriggered);
+  realtimeBus.on('alarms-resolved', onAlarmsResolved);
 
   // heartbeat para mantener viva la conexión y notificar actividad
   const heartbeat = setInterval(() => send('ping', { ok: true }), 25000);
@@ -39,6 +43,8 @@ router.get('/events', (req, res) => {
   req.on('close', () => {
     clearInterval(heartbeat);
     realtimeBus.off('readings-updated', onUpdate);
+    realtimeBus.off('alarms-triggered', onAlarmsTriggered);
+    realtimeBus.off('alarms-resolved', onAlarmsResolved);
   });
 });
 
