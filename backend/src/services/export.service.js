@@ -535,7 +535,7 @@ export async function exportMonthlyPdfReport(reportData) {
     doc.on('error', reject);
   });
 
-  const logoPath = path.join(__dirname, '../../assets/logo.png');
+  const logoPath = path.resolve(__dirname, '../../assets/logo.png');
   const labels = reportData.fridgesData[0]?.dailySeries.map((d) => d.date.slice(5)) || [];
 
   // =========================================================================

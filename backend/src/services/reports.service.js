@@ -102,8 +102,8 @@ export async function getMonthlyReportData(endDate = new Date()) {
       ? allTemps.reduce((acc, t) => acc + Math.pow(t - globalTempAvg, 2), 0) / allTemps.length 
       : 0;
 
-    // Horas fuera de rango (temperatura fuera de minTemp / maxTemp de la BD)
-    const outOfRangeTempReadings = allTemps.filter((t) => t < fridge.minTemp || t > fridge.maxTemp);
+    // Horas fuera de rango usando los límites configurados del refrigerador.
+    const outOfRangeTempReadings = allTemps.filter((t) => t < fridge.tempMin || t > fridge.tempMax);
     // Estimación en horas/día considerando lecturas periódicas
     const hoursOutOfRangeTemp = allTemps.length > 0 
       ? ((outOfRangeTempReadings.length / allTemps.length) * 24).toFixed(1) 
@@ -116,7 +116,7 @@ export async function getMonthlyReportData(endDate = new Date()) {
       ? allRHs.reduce((acc, h) => acc + Math.pow(h - globalRHAvg, 2), 0) / allRHs.length 
       : 0;
 
-    const outOfRangeRHReadings = allRHs.filter((h) => h < fridge.minHumidity || h > fridge.maxHumidity);
+    const outOfRangeRHReadings = allRHs.filter((h) => h < fridge.humMin || h > fridge.humMax);
     const hoursOutOfRangeRH = allRHs.length > 0 
       ? ((outOfRangeRHReadings.length / allRHs.length) * 24).toFixed(1) 
       : '0.0';
@@ -127,8 +127,8 @@ export async function getMonthlyReportData(endDate = new Date()) {
       id: fridge.id,
       label: `${fridge.name} (Slave #${fridge.modbusSlaveId})`,
       modbusSlaveId: fridge.modbusSlaveId,
-      tempLimits: { min: fridge.minTemp, max: fridge.maxTemp },
-      rhLimits: { min: fridge.minHumidity, max: fridge.maxHumidity },
+      tempLimits: { min: fridge.tempMin, max: fridge.tempMax },
+      rhLimits: { min: fridge.humMin, max: fridge.humMax },
       dailySeries,
       statsTemp: {
         outOfRangeHoursPerDay: `${hoursOutOfRangeTemp} h/día`,

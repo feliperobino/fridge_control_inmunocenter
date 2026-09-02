@@ -48,18 +48,61 @@ describe('evaluateAlarmTransitions', () => {
     expect(result.close).toEqual([]);
   });
 
-  it('resets the streak when an in-range reading appears in the middle', () => {
+  it('does not create an alarm when noise keeps the average in range', () => {
     const readings = [
       makeReading(0, { temperature: 9, humidity: 50 }),
       makeReading(10, { temperature: 9, humidity: 50 }),
       makeReading(15, { temperature: 6, humidity: 50 }),
-      makeReading(25, { temperature: 9, humidity: 50 })
+      makeReading(20, { temperature: 7, humidity: 50 })
     ];
 
     const result = evaluateAlarmTransitions({ fridge, readings, openAlarmEvents: [] });
 
     expect(result.create).toEqual([]);
     expect(result.close).toEqual([]);
+  });
+
+  it('creates an alarm when the 20-minute average is outside the configured range', () => {
+    const readings = [
+      makeReading(0, { temperature: 9, humidity: 50 }),
+      makeReading(10, { temperature: 9, humidity: 50 }),
+      makeReading(15, { temperature: 6, humidity: 50 }),
+      makeReading(20, { temperature: 9, humidity: 50 })
+    ];
+
+    const result = evaluateAlarmTransitions({ fridge, readings, openAlarmEvents: [] });
+
+    expect(result.create).toEqual([
+      {
+        type: 'TEMP_HIGH',
+        startedAt: readings[0].recordedAt.toISOString()
+      }
+    ]);
+  });
+
+  it('creates an alarm when at least 90 percent of the 20-minute window is outside', () => {
+    const readings = [
+      makeReading(0, { temperature: 9, humidity: 50 }),
+      makeReading(2, { temperature: 9, humidity: 50 }),
+      makeReading(4, { temperature: 9, humidity: 50 }),
+      makeReading(6, { temperature: 9, humidity: 50 }),
+      makeReading(8, { temperature: 9, humidity: 50 }),
+      makeReading(10, { temperature: 6, humidity: 50 }),
+      makeReading(12, { temperature: 9, humidity: 50 }),
+      makeReading(14, { temperature: 9, humidity: 50 }),
+      makeReading(16, { temperature: 9, humidity: 50 }),
+      makeReading(18, { temperature: 9, humidity: 50 }),
+      makeReading(20, { temperature: 9, humidity: 50 })
+    ];
+
+    const result = evaluateAlarmTransitions({ fridge, readings, openAlarmEvents: [] });
+
+    expect(result.create).toEqual([
+      {
+        type: 'TEMP_HIGH',
+        startedAt: readings[0].recordedAt.toISOString()
+      }
+    ]);
   });
 
   it('closes an open alarm when the current reading returns to range', () => {

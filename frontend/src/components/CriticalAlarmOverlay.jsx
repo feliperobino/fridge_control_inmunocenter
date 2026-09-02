@@ -2,13 +2,13 @@ const CRITICAL_TYPES = new Set(['TEMP_HIGH', 'TEMP_LOW']);
 
 function formatAlarmTitle(type) {
   const labels = {
-    TEMP_HIGH: 'Temperatura alta confirmada',
-    TEMP_LOW: 'Temperatura baja confirmada',
-    HUM_HIGH: 'Humedad alta confirmada',
-    HUM_LOW: 'Humedad baja confirmada'
+    TEMP_HIGH: 'Temperatura alta',
+    TEMP_LOW: 'Temperatura baja',
+    HUM_HIGH: 'Humedad alta',
+    HUM_LOW: 'Humedad baja'
   };
 
-  return labels[type] || 'Alarma confirmada';
+  return labels[type] || 'Alarma de temperatura';
 }
 
 function formatTime(value) {
@@ -39,7 +39,7 @@ export function CriticalAlarmOverlay({ alarms, isSoundEnabled, isMuted, onEnable
     <div className="critical-alarm-overlay" role="alertdialog" aria-live="assertive" aria-label="Alarma confirmada">
       <div className="critical-alarm-panel">
         <div className="critical-alarm-heading">
-          <span className="critical-alarm-kicker">ALARMA CONFIRMADA</span>
+          <span className="critical-alarm-kicker">ALARMA DE TEMPERATURA</span>
           <span className="critical-alarm-count">{alarms.length} activa{alarms.length === 1 ? '' : 's'}</span>
         </div>
         <h2>{formatAlarmTitle(alarm.type)}</h2>

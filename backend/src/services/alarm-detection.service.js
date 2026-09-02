@@ -22,6 +22,7 @@ const ALARM_RULES = [
 ];
 
 const TWENTY_MINUTES_MS = 20 * 60 * 1000;
+const OUT_OF_RANGE_RATIO_THRESHOLD = 0.9;
 
 function toTime(value) {
   return new Date(value).getTime();
@@ -54,20 +55,26 @@ function isOutsideRange(reading, fridge, rule) {
   return rule.isOutside(reading[rule.field], fridge);
 }
 
-function findContinuousStreakStart(readings, fridge, rule) {
-  let index = readings.length - 1;
+function getEvaluationWindow(readings, currentReading) {
+  const windowStart = toTime(currentReading.recordedAt) - TWENTY_MINUTES_MS;
+  return readings.filter((reading) => toTime(reading.recordedAt) >= windowStart);
+}
 
-  while (index >= 0 && isOutsideRange(readings[index], fridge, rule)) {
-    index -= 1;
+function qualifiesForAlarm(readings, fridge, rule, currentReading) {
+  const evaluationWindow = getEvaluationWindow(readings, currentReading);
+
+  if (
+    evaluationWindow.length === 0 ||
+    toTime(currentReading.recordedAt) - toTime(evaluationWindow[0].recordedAt) < TWENTY_MINUTES_MS
+  ) {
+    return false;
   }
 
-  const firstOutsideIndex = index + 1;
+  const values = evaluationWindow.map((reading) => Number(reading[rule.field]));
+  const average = values.reduce((sum, value) => sum + value, 0) / values.length;
+  const outsideCount = evaluationWindow.filter((reading) => isOutsideRange(reading, fridge, rule)).length;
 
-  if (firstOutsideIndex >= readings.length) {
-    return null;
-  }
-
-  return readings[firstOutsideIndex];
+  return rule.isOutside(average, fridge) || outsideCount / evaluationWindow.length >= OUT_OF_RANGE_RATIO_THRESHOLD;
 }
 
 export function evaluateAlarmTransitions({ fridge, readings, openAlarmEvents = [], now = new Date() }) {
@@ -89,7 +96,7 @@ export function evaluateAlarmTransitions({ fridge, readings, openAlarmEvents = [
     const currentOutside = isOutsideRange(currentReading, fridge, rule);
     const openAlarms = openAlarmsByType[rule.type] || [];
 
-    if (!currentOutside) {
+    if (openAlarms.length > 0 && !currentOutside) {
       close.push(
         ...openAlarms.map((alarmEvent) => ({
           id: alarmEvent.id,
@@ -104,16 +111,11 @@ export function evaluateAlarmTransitions({ fridge, readings, openAlarmEvents = [
       continue;
     }
 
-    const streakStart = findContinuousStreakStart(orderedReadings, fridge, rule);
-
-    if (!streakStart) {
-      continue;
-    }
-
-    if (toTime(currentReading.recordedAt) - toTime(streakStart.recordedAt) >= TWENTY_MINUTES_MS) {
+    if (qualifiesForAlarm(orderedReadings, fridge, rule, currentReading)) {
+      const evaluationWindow = getEvaluationWindow(orderedReadings, currentReading);
       create.push({
         type: rule.type,
-        startedAt: new Date(streakStart.recordedAt).toISOString()
+        startedAt: new Date(evaluationWindow[0].recordedAt).toISOString()
       });
     }
   }
