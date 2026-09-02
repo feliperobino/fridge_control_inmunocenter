@@ -28,6 +28,13 @@ function extractSlaveId(requestName) {
 
 function resolveRecordedAt(item) {
   if (item.D) {
+    const localDateMatch = item.D.match(/^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/);
+    if (localDateMatch) {
+      const [, day, month, year, hours, minutes, seconds] = localDateMatch;
+      const parsedLocalDate = new Date(`${year}-${month}-${day}T${hours}:${minutes}:${seconds}`);
+      if (!Number.isNaN(parsedLocalDate.getTime())) return parsedLocalDate;
+    }
+
     const d = new Date(item.D);
     if (!Number.isNaN(d.getTime())) return d;
   }
@@ -136,11 +143,12 @@ export async function ingest(req, res) {
     return res.status(400).json({ error: 'Invalid payload', details: parsedBatch.error.flatten() });
   }
 
-  const results = await Promise.allSettled(
-    parsedBatch.data.map((item) => {
+  const results = [];
+  for (const item of parsedBatch.data) {
+    try {
       const modbusSlaveId = extractSlaveId(item.ID);
       if (modbusSlaveId === null) {
-        return Promise.reject(new Error(`No pude resolver slaveId desde ID="${item.ID}"`));
+        throw new Error(`No pude resolver slaveId desde ID="${item.ID}"`);
       }
 
       const averaged = pushSample(modbusSlaveId, {
@@ -149,9 +157,11 @@ export async function ingest(req, res) {
         recordedAt: resolveRecordedAt(item)
       });
 
-      return processSingleReading({ modbusSlaveId, ...averaged });
-    })
-  );
+      results.push({ status: 'fulfilled', value: await processSingleReading({ modbusSlaveId, ...averaged }) });
+    } catch (error) {
+      results.push({ status: 'rejected', reason: error });
+    }
+  }
 
   const processed = results.filter((r) => r.status === 'fulfilled').map((r) => r.value);
   const failed = results
