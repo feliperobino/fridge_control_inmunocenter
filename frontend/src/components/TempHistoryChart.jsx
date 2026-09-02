@@ -22,24 +22,18 @@ function formatTick(timestamp) {
   }).format(date);
 }
 
-function resampleReadings(readings, targetPoints = 180) {
+function resampleReadings(readings, range, targetPoints = 180) {
   if (!readings || readings.length === 0) return [];
-  if (readings.length <= targetPoints) {
-    return readings.map((r) => ({
-      ...r,
-      temperature: Number(r.temperature.toFixed(1)),
-      humidity: Number(r.humidity.toFixed(1)),
-      timestamp: new Date(r.recordedAt).getTime()
-    }));
-  }
 
   const sorted = [...readings].sort(
     (a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()
   );
 
-  const startTime = new Date(sorted[0].recordedAt).getTime();
-  const endTime = new Date(sorted[sorted.length - 1].recordedAt).getTime();
+  const startTime = range?.from ? new Date(range.from).getTime() : new Date(sorted[0].recordedAt).getTime();
+  const endTime = range?.to ? new Date(range.to).getTime() : new Date(sorted[sorted.length - 1].recordedAt).getTime();
   const interval = (endTime - startTime) / targetPoints;
+
+  if (!Number.isFinite(interval) || interval <= 0) return [];
 
   const resampled = [];
   let currentIndex = 0;
@@ -49,12 +43,16 @@ function resampleReadings(readings, targetPoints = 180) {
     const bucketEnd = bucketStart + interval;
     const bucketReadings = [];
 
-    while (
-      currentIndex < sorted.length &&
-      new Date(sorted[currentIndex].recordedAt).getTime() < bucketEnd
-    ) {
-      bucketReadings.push(sorted[currentIndex]);
-      currentIndex++;
+    while (currentIndex < sorted.length) {
+      const readingTime = new Date(sorted[currentIndex].recordedAt).getTime();
+      if (readingTime < bucketStart) {
+        currentIndex++;
+      } else if (readingTime < bucketEnd || (i === targetPoints - 1 && readingTime <= endTime)) {
+        bucketReadings.push(sorted[currentIndex]);
+        currentIndex++;
+      } else {
+        break;
+      }
     }
 
     if (bucketReadings.length > 0) {
@@ -70,6 +68,13 @@ function resampleReadings(readings, targetPoints = 180) {
         humidity: Number(avgHum.toFixed(1)),
         count: bucketReadings.length
       });
+    } else {
+      resampled.push({
+        timestamp: Math.floor((bucketStart + bucketEnd) / 2),
+        temperature: null,
+        humidity: null,
+        count: 0
+      });
     }
   }
 
@@ -82,8 +87,8 @@ export function TempHistoryChart({ readings, fridge, selectedRange, onExtremesCa
 
   // 1. Datos promediados para graficar
   const data = useMemo(() => {
-    return resampleReadings(readings, 180);
-  }, [readings]);
+    return resampleReadings(readings, selectedRange, 180);
+  }, [readings, selectedRange]);
 
   // 2. Extremos calculados estrictamente sobre la curva promediada (resilientes al ruido)
   const smoothedExtremes = useMemo(() => {
