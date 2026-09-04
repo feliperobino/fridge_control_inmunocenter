@@ -10,6 +10,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const PDF_SUMMARY_THRESHOLD = 500;
+export const MAX_EXPORT_ROWS = 100000;
 
 function parseDate(value) {
   const date = new Date(value);
@@ -59,8 +60,15 @@ function buildWhere(fridgeId, from, to, options = {}) {
 async function getExportData(fridgeId, from, to, options = {}) {
   const startDate = parseDate(from);
   const endDate = parseDate(to);
+  const where = buildWhere(fridgeId, startDate, endDate, options);
+  const rowCount = await prisma.reading.count({ where });
+
+  if (rowCount > MAX_EXPORT_ROWS) {
+    throw new Error(`Export exceeds maximum of ${MAX_EXPORT_ROWS} readings`);
+  }
+
   const readings = await prisma.reading.findMany({
-    where: buildWhere(fridgeId, startDate, endDate, options),
+    where,
     orderBy: { recordedAt: 'asc' },
     include: {
       fridge: {

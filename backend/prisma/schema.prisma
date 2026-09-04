@@ -50,6 +50,7 @@ model Fridge {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
   readings      Reading[]
+  dailySummaries ReadingDailySummary[]
   alarmEvents   AlarmEvent[]
 }
 
@@ -64,6 +65,30 @@ model Reading {
   createdAt   DateTime @default(now())
 
   @@index([fridgeId, recordedAt])
+}
+
+model ReadingDailySummary {
+  id                  String   @id @default(uuid())
+  fridge              Fridge   @relation(fields: [fridgeId], references: [id], onDelete: Cascade)
+  fridgeId            String
+  day                 DateTime @db.Date
+  readingCount        Int      @default(0)
+  temperatureSum      Float    @default(0)
+  temperatureSumSq    Float    @default(0)
+  temperatureMin      Float
+  temperatureMax      Float
+  temperatureOutCount Int      @default(0)
+  humiditySum         Float    @default(0)
+  humiditySumSq       Float    @default(0)
+  humidityMin         Float
+  humidityMax         Float
+  humidityOutCount    Int      @default(0)
+  hoursMask           Int      @default(0)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([fridgeId, day])
+  @@index([day])
 }
 
 model AlarmEvent {

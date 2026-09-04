@@ -50,6 +50,10 @@ export async function exportReadings(req, res) {
       return res.status(400).json({ error: 'Invalid date range' });
     }
 
+    if (error?.message?.startsWith('Export exceeds maximum')) {
+      return res.status(413).json({ error: 'Export range contains too many readings' });
+    }
+
     return res.status(500).json({ error: 'Export failed' });
   }
 }

@@ -21,6 +21,7 @@ services:
       TZ: America/Santiago
       INGEST_TIMEZONE: America/Santiago
       PORT: 3000
+      READING_RETENTION_MONTHS: ${READING_RETENTION_MONTHS:-24}
       DATABASE_URL: postgresql://fridge:fridge@postgres:5432/fridge_monitor?schema=public
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET}

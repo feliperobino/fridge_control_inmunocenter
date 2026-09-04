@@ -2,6 +2,40 @@ import cron from 'node-cron';
 import prisma from '../config/prisma.js';
 import env from '../config/env.js';
 
+const DELETE_BATCH_SIZE = 5000;
+
+async function deleteOldReadings(cutoffDate) {
+  let deletedCount = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const readings = await prisma.reading.findMany({
+      where: { recordedAt: { lt: cutoffDate } },
+      orderBy: { recordedAt: 'asc' },
+      take: DELETE_BATCH_SIZE,
+      select: { id: true }
+    });
+
+    if (readings.length === 0) {
+      hasMore = false;
+      continue;
+    }
+
+    const result = await prisma.reading.deleteMany({
+      where: { id: { in: readings.map(({ id }) => id) } }
+    });
+    deletedCount += result.count;
+
+    hasMore = readings.length === DELETE_BATCH_SIZE;
+  }
+
+  await prisma.readingDailySummary.deleteMany({
+    where: { day: { lt: cutoffDate } }
+  });
+
+  return deletedCount;
+}
+
 /**
  * Inicia el cronjob diario de purga/retención de lecturas.
  */
@@ -21,15 +55,9 @@ export function initRetentionScheduler() {
         return;
       }
 
-      const result = await prisma.reading.deleteMany({
-        where: {
-          timestamp: {
-            lt: cutoffDate,
-          },
-        },
-      });
+      const deletedCount = await deleteOldReadings(cutoffDate);
 
-      console.log(`[retention] Borradas ${result.count} lecturas anteriores a ${cutoffDate.toISOString()}`);
+      console.log(`[retention] Borradas ${deletedCount} lecturas anteriores a ${cutoffDate.toISOString()}`);
     } catch (error) {
       console.error('[retention] Error durante el proceso de limpieza de lecturas:', error);
     }

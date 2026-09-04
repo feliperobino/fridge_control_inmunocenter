@@ -5,6 +5,7 @@ import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js
 import { pushSample } from '../services/reading_buffer.service.js';
 import env from '../config/env.js';
 import { parseLoggerLocalDate } from '../utils/ingest-date.js';
+import { updateReadingDailySummary } from '../services/reading-daily-summary.service.js';
 import {
   emitAlarmsResolved,
   emitAlarmsTriggered,
@@ -57,6 +58,8 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
   const reading = await prisma.reading.create({
     data: { fridgeId: fridge.id, temperature, humidity, recordedAt, receivedAt }
   });
+
+  await updateReadingDailySummary({ fridge, temperature, humidity, recordedAt });
 
   // REFACTOR NO QUERY HISTÓRICO - QUERY SOLO LOS ÚLTIMOS 2 HORAS PARA EVALUAR ALARMAS
   const LOOKBACK_HOURS = 2;
