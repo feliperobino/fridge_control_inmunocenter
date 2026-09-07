@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import prisma from '../config/prisma.js';
 import { evaluateAlarmTransitions } from '../services/alarm-detection.service.js';
+import { notifyAlarmCreated } from '../services/alarm-notification.service.js';
 
 import { pushSample } from '../services/reading_buffer.service.js';
 import env from '../config/env.js';
@@ -109,6 +110,19 @@ async function processSingleReading({ modbusSlaveId, temperature, humidity, reco
       )
     )
   ]);
+
+  await Promise.all(
+    createdAlarms.map(async (alarm) => {
+      try {
+        const notification = await notifyAlarmCreated({ alarm, fridge, reading: { ...reading, receivedAt } });
+        if (notification.sent) {
+          await prisma.alarmEvent.update({ where: { id: alarm.id }, data: { notified: true } });
+        }
+      } catch (error) {
+        console.error(`Alarm notification failed for ${alarm.id}`, error);
+      }
+    })
+  );
 
   const alarmContext = {
     fridgeId: fridge.id,

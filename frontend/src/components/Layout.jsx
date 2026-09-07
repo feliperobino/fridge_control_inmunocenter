@@ -3,7 +3,7 @@ import { useAuth } from '../auth/AuthContext.jsx';
 
 const navItems = [
   { to: '/dashboard', label: 'Dashboard' },
-  { to: '/alarms', label: 'Alarmas' },
+  { to: '/alarms', label: 'Gestión de Alarmas' },
   { to: '/reports', label: 'Reportes' },
   { to: '/users', label: 'Usuarios', roles: ['ADMIN'] }
 ];

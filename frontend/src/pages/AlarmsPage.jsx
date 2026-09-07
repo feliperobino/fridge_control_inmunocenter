@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react';
 import { apiRequest } from '../api/client.js';
+import {
+  createAlarmRecipient,
+  deleteAlarmRecipient,
+  listAlarmRecipients,
+  updateAlarmRecipient
+} from '../api/alarms.js';
+import { useAuth } from '../auth/AuthContext.jsx';
 import { AlarmsList } from '../components/AlarmsList.jsx';
 import { ExportButtons } from '../components/ExportButtons.jsx';
 
@@ -21,6 +28,10 @@ export default function AlarmsPage() {
   const [fridgeId, setFridgeId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [recipients, setRecipients] = useState([]);
+  const [recipientEmail, setRecipientEmail] = useState('');
+  const [editingRecipientId, setEditingRecipientId] = useState('');
+  const { isAdmin } = useAuth();
   const exportRange = getLast24HoursRange();
 
   useEffect(() => {
@@ -44,6 +55,10 @@ export default function AlarmsPage() {
 
         setFridges(Array.isArray(fridgesData) ? fridgesData : []);
         setAlarms(Array.isArray(alarmsData) ? alarmsData : []);
+        if (isAdmin) {
+          const recipientsData = await listAlarmRecipients();
+          setRecipients(Array.isArray(recipientsData) ? recipientsData : []);
+        }
       } catch (loadError) {
         if (isMounted) {
           setError(loadError?.data?.error || 'No se pudo cargar la vista de alarmas');
@@ -60,13 +75,66 @@ export default function AlarmsPage() {
     return () => {
       isMounted = false;
     };
-  }, [status, fridgeId]);
+  }, [status, fridgeId, isAdmin]);
+
+  function startEditingRecipient(recipient) {
+    setEditingRecipientId(recipient.id);
+    setRecipientEmail(recipient.email);
+  }
+
+  function resetRecipientForm() {
+    setEditingRecipientId('');
+    setRecipientEmail('');
+  }
+
+  async function refreshRecipients() {
+    const data = await listAlarmRecipients();
+    setRecipients(Array.isArray(data) ? data : []);
+  }
+
+  async function handleRecipientSubmit(event) {
+    event.preventDefault();
+    setError('');
+
+    try {
+      if (editingRecipientId) {
+        await updateAlarmRecipient(editingRecipientId, { email: recipientEmail });
+      } else {
+        await createAlarmRecipient({ email: recipientEmail });
+      }
+      await refreshRecipients();
+      resetRecipientForm();
+    } catch (recipientError) {
+      setError(recipientError?.data?.error || 'No se pudo guardar el destinatario');
+    }
+  }
+
+  async function handleRecipientToggle(recipient) {
+    try {
+      await updateAlarmRecipient(recipient.id, { active: !recipient.active });
+      await refreshRecipients();
+    } catch (recipientError) {
+      setError(recipientError?.data?.error || 'No se pudo actualizar el destinatario');
+    }
+  }
+
+  async function handleRecipientDelete(recipientId) {
+    try {
+      await deleteAlarmRecipient(recipientId);
+      await refreshRecipients();
+      if (editingRecipientId === recipientId) {
+        resetRecipientForm();
+      }
+    } catch (recipientError) {
+      setError(recipientError?.data?.error || 'No se pudo eliminar el destinatario');
+    }
+  }
 
   return (
     <section className="page-stack">
       <div className="page-heading page-heading-split">
         <div>
-          <span className="brand-kicker">Alarmas</span>
+          <span className="brand-kicker">Gestión de Alarmas</span>
           <h2>Eventos globales</h2>
           <p>Filtrar alarmas abiertas o resueltas, y acotar por refrigerador si lo necesitas.</p>
         </div>
@@ -105,6 +173,62 @@ export default function AlarmsPage() {
       {!isLoading && !error ? (
         <div className="card-shell">
           <AlarmsList alarms={alarms} emptyMessage="No hay alarmas para los filtros seleccionados." />
+        </div>
+      ) : null}
+
+      {isAdmin ? (
+        <div className="card-shell">
+          <div className="section-heading">
+            <div>
+              <span className="brand-kicker">Notificaciones</span>
+              <h3>Destinatarios de alarmas</h3>
+            </div>
+          </div>
+
+          <form className="admin-form" onSubmit={handleRecipientSubmit}>
+            <label>
+              Email
+              <input
+                type="email"
+                value={recipientEmail}
+                onChange={(event) => setRecipientEmail(event.target.value)}
+                placeholder="alertas@ejemplo.com"
+                required
+              />
+            </label>
+            <div className="button-row">
+              <button className="button button-primary" type="submit">
+                {editingRecipientId ? 'Guardar cambios' : 'Agregar destinatario'}
+              </button>
+              {editingRecipientId ? (
+                <button className="button button-secondary" type="button" onClick={resetRecipientForm}>
+                  Cancelar
+                </button>
+              ) : null}
+            </div>
+          </form>
+
+          <div className="admin-table">
+            {recipients.length > 0 ? recipients.map((recipient) => (
+              <article key={recipient.id} className="admin-table-row">
+                <div>
+                  <strong>{recipient.email}</strong>
+                  <small>{recipient.active ? 'Activo' : 'Inactivo'}</small>
+                </div>
+                <div className="button-row">
+                  <button className="button button-secondary" type="button" onClick={() => startEditingRecipient(recipient)}>
+                    Editar
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={() => handleRecipientToggle(recipient)}>
+                    {recipient.active ? 'Desactivar' : 'Activar'}
+                  </button>
+                  <button className="button button-secondary" type="button" onClick={() => handleRecipientDelete(recipient.id)}>
+                    Eliminar
+                  </button>
+                </div>
+              </article>
+            )) : <div className="empty-state">No hay destinatarios configurados.</div>}
+          </div>
         </div>
       ) : null}
     </section>

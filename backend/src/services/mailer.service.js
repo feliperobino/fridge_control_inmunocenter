@@ -22,7 +22,7 @@ function getTransporter() {
   return transporter;
 }
 
-export async function sendReportEmail({ to, subject, text, attachments }) {
+export async function sendEmail({ to, subject, text, attachments = [] }) {
   if (!Array.isArray(to) || to.length === 0) {
     throw new Error('Recipients are required');
   }
@@ -34,4 +34,8 @@ export async function sendReportEmail({ to, subject, text, attachments }) {
     text,
     attachments
   });
+}
+
+export async function sendReportEmail(options) {
+  return sendEmail(options);
 }
