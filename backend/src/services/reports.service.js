@@ -126,7 +126,7 @@ export async function getMonthlyReportData(endDate = new Date()) {
   return {
     metadata: {
       title: 'Inmunocenter - Reporte de temperatura y humedad Refrigeradores',
-      subtitle: 'Guardia Vieja 155 of 1206',
+      subtitle: 'Guardia Vieja 255 of 1206',
       generatedAt: formatDate(new Date()),
       period: `${formatDate(from)} - ${formatDate(to)}`
     },

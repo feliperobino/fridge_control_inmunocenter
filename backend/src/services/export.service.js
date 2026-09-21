@@ -483,54 +483,6 @@ function renderHeader(doc, metadata, logoPath) {
 }
 
 /**
- * Dibujar la tabla estadística al pie de cada página
- */
-function renderStatsTable(doc, fridgesData, metricType, startY) {
-  const isTemp = metricType === 'temperature';
-  const unit = isTemp ? '°C' : '%';
-  const title = isTemp ? 'Estadísticas Globales de Temperatura (30 Días)' : 'Estadísticas Globales de Humedad (30 Días)';
-
-  doc.fontSize(10).fillColor('#0f172a').text(title, 40, startY);
-
-  const headers = ['Refrigerador', 'Tiempo Fuera Rango', `Prom. Global ± σ²`, 'Lecturas (% Uptime)', `Extremas (${unit})`];
-  const colWidths = [140, 100, 105, 90, 80];
-  let cursorY = startY + 14;
-
-  // Header Row
-  let cursorX = 40;
-  headers.forEach((h, idx) => {
-    const w = colWidths[idx];
-    doc.rect(cursorX, cursorY, w, 18).fillAndStroke('#f1f5f9', '#cbd5e1');
-    doc.fillColor('#0f172a').fontSize(8).text(h, cursorX + 4, cursorY + 5, { width: w - 8, align: 'left' });
-    cursorX += w;
-  });
-
-  cursorY += 18;
-
-  // Data Rows
-  fridgesData.forEach((fridge) => {
-    const stats = isTemp ? fridge.statsTemp : fridge.statsRH;
-    const cells = [
-      fridge.label,
-      stats.outOfRangeHoursPerDay,
-      `${stats.globalAvg}${unit} ± ${stats.variance}`,
-      `${stats.totalReadings} (${stats.uptimePercentage}%)`,
-      `${stats.absoluteMin} / ${stats.absoluteMax} ${unit}`
-    ];
-
-    cursorX = 40;
-    cells.forEach((cell, idx) => {
-      const w = colWidths[idx];
-      doc.rect(cursorX, cursorY, w, 16).strokeColor('#e2e8f0').stroke();
-      doc.fillColor('#334155').fontSize(7.5).text(cell, cursorX + 4, cursorY + 4, { width: w - 8, align: 'left' });
-      cursorX += w;
-    });
-
-    cursorY += 16;
-  });
-}
-
-/**
  * Genera y exporta el reporte mensual en PDF (Exactamente 2 páginas)
  */
 export async function exportMonthlyPdfReport(reportData) {
@@ -587,9 +539,6 @@ export async function exportMonthlyPdfReport(reportData) {
     }
   }
 
-  // Tabla Estadística al pie de Página 1
-  renderStatsTable(doc, reportData.fridgesData, 'temperature', 485);
-
   // =========================================================================
   // PÁGINA 2: HUMEDAD RELATIVA (30 DÍAS)
   // =========================================================================
@@ -623,9 +572,6 @@ export async function exportMonthlyPdfReport(reportData) {
       doc.fontSize(9).fillColor('#64748b').text(fridge.label, pos.x + 10, pos.y + 10);
     }
   }
-
-  // Tabla Estadística al pie de Página 2
-  renderStatsTable(doc, reportData.fridgesData, 'humidity', 485);
 
   doc.end();
 
