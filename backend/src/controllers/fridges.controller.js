@@ -116,8 +116,8 @@ export async function getFridge(req, res) {
 
 export async function listReadings(req, res) {
   const { id } = req.params;
-  const MAX_READINGS_PER_QUERY = 1440;
-  const limit = parseClampedInteger(req.query.limit, 200, 1, MAX_READINGS_PER_QUERY);
+  const MAX_BUCKETS_PER_QUERY = 1440;
+  const limit = parseClampedInteger(req.query.limit, MAX_BUCKETS_PER_QUERY, 1, MAX_BUCKETS_PER_QUERY);
   const offset = parseClampedInteger(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
   const from = parseDateFilter(req.query.from);
   const to = parseDateFilter(req.query.to);
@@ -135,31 +135,40 @@ export async function listReadings(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
-  const where = {
-    fridgeId: fridge.id,
-    recordedAt: {
-      ...(from ? { gte: from } : {}),
-      ...(to ? { lte: to } : {})
-    }
-  };
-
-  const [total, readings] = await Promise.all([
-    prisma.reading.count({ where }),
-    prisma.reading.findMany({
-      where,
-      orderBy: { recordedAt: 'asc' },
-      skip: offset,
-      take: limit,
-      select: {
-        id: true,
-        fridgeId: true,
-        temperature: true,
-        humidity: true,
-        recordedAt: true,
-        receivedAt: true
-      }
-    })
+  const start = from ?? new Date('1970-01-01T00:00:00.000Z');
+  const end = to ?? new Date();
+  const [countRows, readings] = await Promise.all([
+    prisma.$queryRaw`
+      SELECT COUNT(*)::int AS "total"
+      FROM (
+        SELECT DATE_TRUNC('minute', r."recordedAt")
+        FROM "Reading" r
+        WHERE r."fridgeId" = ${fridge.id}
+          AND r."recordedAt" >= ${start}
+          AND r."recordedAt" <= ${end}
+        GROUP BY DATE_TRUNC('minute', r."recordedAt")
+      ) minute_buckets;
+    `,
+    prisma.$queryRaw`
+      SELECT
+        MIN(r.id) AS "id",
+        r."fridgeId" AS "fridgeId",
+        AVG(r.temperature)::float AS "temperature",
+        AVG(r.humidity)::float AS "humidity",
+        DATE_TRUNC('minute', r."recordedAt") AS "recordedAt",
+        MAX(r."receivedAt") AS "receivedAt"
+      FROM "Reading" r
+      WHERE r."fridgeId" = ${fridge.id}
+        AND r."recordedAt" >= ${start}
+        AND r."recordedAt" <= ${end}
+      GROUP BY r."fridgeId", DATE_TRUNC('minute', r."recordedAt")
+      ORDER BY DATE_TRUNC('minute', r."recordedAt") ASC
+      OFFSET ${offset}
+      LIMIT ${limit};
+    `
   ]);
+
+  const total = Number(countRows[0]?.total ?? 0);
 
   return res.json({
     readings,
