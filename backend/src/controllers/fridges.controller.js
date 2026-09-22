@@ -32,21 +32,43 @@ function withLatestReading(fridge) {
 
   return {
     ...fridge,
-    latestReading: latestReading || null,
-    readings: undefined
+    latestReading: latestReading || fridge.latestReading || null,
+    readings: undefined,
+    __latestReadingRaw: undefined
   };
 }
 
 export async function listFridges(req, res) {
-  const fridges = await prisma.fridge.findMany({
-    orderBy: { createdAt: 'asc' },
-    include: {
-      readings: {
-        orderBy: { recordedAt: 'desc' },
-        take: 1
-      }
-    }
-  });
+  const fridges = await prisma.$queryRaw`
+    SELECT
+      f.id,
+      f.name,
+      f.location,
+      f."modbusSlaveId" AS "modbusSlaveId",
+      f."tempMin" AS "tempMin",
+      f."tempMax" AS "tempMax",
+      f."humMin" AS "humMin",
+      f."humMax" AS "humMax",
+      f."createdAt" AS "createdAt",
+      f."updatedAt" AS "updatedAt",
+      jsonb_build_object(
+        'id', lr.id,
+        'fridgeId', lr."fridgeId",
+        'temperature', lr.temperature,
+        'humidity', lr.humidity,
+        'recordedAt', lr."recordedAt",
+        'receivedAt', lr."receivedAt"
+      ) AS "latestReading"
+    FROM "Fridge" f
+    LEFT JOIN LATERAL (
+      SELECT r.id, r."fridgeId", r.temperature, r.humidity, r."recordedAt", r."receivedAt"
+      FROM "Reading" r
+      WHERE r."fridgeId" = f.id
+      ORDER BY r."recordedAt" DESC
+      LIMIT 1
+    ) lr ON true
+    ORDER BY f."createdAt" ASC;
+  `;
 
   return res.json(fridges.map(withLatestReading));
 }
@@ -54,15 +76,36 @@ export async function listFridges(req, res) {
 export async function getFridge(req, res) {
   const { id } = req.params;
 
-  const fridge = await prisma.fridge.findUnique({
-    where: { id },
-    include: {
-      readings: {
-        orderBy: { recordedAt: 'desc' },
-        take: 1
-      }
-    }
-  });
+  const [fridge] = await prisma.$queryRaw`
+    SELECT
+      f.id,
+      f.name,
+      f.location,
+      f."modbusSlaveId" AS "modbusSlaveId",
+      f."tempMin" AS "tempMin",
+      f."tempMax" AS "tempMax",
+      f."humMin" AS "humMin",
+      f."humMax" AS "humMax",
+      f."createdAt" AS "createdAt",
+      f."updatedAt" AS "updatedAt",
+      jsonb_build_object(
+        'id', lr.id,
+        'fridgeId', lr."fridgeId",
+        'temperature', lr.temperature,
+        'humidity', lr.humidity,
+        'recordedAt', lr."recordedAt",
+        'receivedAt', lr."receivedAt"
+      ) AS "latestReading"
+    FROM "Fridge" f
+    LEFT JOIN LATERAL (
+      SELECT r.id, r."fridgeId", r.temperature, r.humidity, r."recordedAt", r."receivedAt"
+      FROM "Reading" r
+      WHERE r."fridgeId" = f.id
+      ORDER BY r."recordedAt" DESC
+      LIMIT 1
+    ) lr ON true
+    WHERE f.id = ${id};
+  `;
 
   if (!fridge) {
     return res.status(404).json({ error: 'Fridge not found' });
@@ -73,10 +116,8 @@ export async function getFridge(req, res) {
 
 export async function listReadings(req, res) {
   const { id } = req.params;
-  // Tope subido a 20000 (~ un día completo a cadencia de 5s por sensor, con margen)
-  // y ahora se recorta en vez de rechazar: un límite fuera de rango nunca debería
-  // tumbar toda la vista de estadísticas del día.
-  const limit = parseClampedInteger(req.query.limit, 50, 1, 20000);
+  const MAX_READINGS_PER_QUERY = 1440;
+  const limit = parseClampedInteger(req.query.limit, 200, 1, MAX_READINGS_PER_QUERY);
   const offset = parseClampedInteger(req.query.offset, 0, 0, Number.MAX_SAFE_INTEGER);
   const from = parseDateFilter(req.query.from);
   const to = parseDateFilter(req.query.to);
@@ -96,14 +137,10 @@ export async function listReadings(req, res) {
 
   const where = {
     fridgeId: fridge.id,
-    ...(from || to
-      ? {
-          recordedAt: {
-            ...(from ? { gte: from } : {}),
-            ...(to ? { lte: to } : {})
-          }
-        }
-      : {})
+    recordedAt: {
+      ...(from ? { gte: from } : {}),
+      ...(to ? { lte: to } : {})
+    }
   };
 
   const [total, readings] = await Promise.all([
@@ -112,7 +149,15 @@ export async function listReadings(req, res) {
       where,
       orderBy: { recordedAt: 'asc' },
       skip: offset,
-      take: limit
+      take: limit,
+      select: {
+        id: true,
+        fridgeId: true,
+        temperature: true,
+        humidity: true,
+        recordedAt: true,
+        receivedAt: true
+      }
     })
   ]);
 
@@ -144,44 +189,44 @@ export async function getStats(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
-  const where = {
-    fridgeId: fridge.id,
-    ...(from || to
-      ? {
-          recordedAt: {
-            ...(from ? { gte: from } : {}),
-            ...(to ? { lte: to } : {})
-          }
-        }
-      : {})
-  };
+  const stats = from || to
+    ? await prisma.$queryRaw`
+        SELECT
+          MIN("temperature")::float AS "temperature_min",
+          MAX("temperature")::float AS "temperature_max",
+          AVG("temperature")::float AS "temperature_avg",
+          MIN("humidity")::float AS "humidity_min",
+          MAX("humidity")::float AS "humidity_max",
+          AVG("humidity")::float AS "humidity_avg"
+        FROM "Reading"
+        WHERE "fridgeId" = ${fridge.id}
+          AND "recordedAt" >= ${from ?? new Date('1970-01-01T00:00:00.000Z')}
+          AND "recordedAt" <= ${to ?? new Date()}
+      `
+    : await prisma.$queryRaw`
+        SELECT
+          MIN("temperature")::float AS "temperature_min",
+          MAX("temperature")::float AS "temperature_max",
+          AVG("temperature")::float AS "temperature_avg",
+          MIN("humidity")::float AS "humidity_min",
+          MAX("humidity")::float AS "humidity_max",
+          AVG("humidity")::float AS "humidity_avg"
+        FROM "Reading"
+        WHERE "fridgeId" = ${fridge.id}
+      `;
 
-  const stats = await prisma.reading.aggregate({
-    where,
-    _min: {
-      temperature: true,
-      humidity: true
-    },
-    _max: {
-      temperature: true,
-      humidity: true
-    },
-    _avg: {
-      temperature: true,
-      humidity: true
-    }
-  });
+  const row = Array.isArray(stats) ? stats[0] : null;
 
   return res.json({
     temperature: {
-      min: stats._min.temperature,
-      max: stats._max.temperature,
-      avg: stats._avg.temperature
+      min: row?.temperature_min ?? null,
+      max: row?.temperature_max ?? null,
+      avg: row?.temperature_avg ?? null
     },
     humidity: {
-      min: stats._min.humidity,
-      max: stats._max.humidity,
-      avg: stats._avg.humidity
+      min: row?.humidity_min ?? null,
+      max: row?.humidity_max ?? null,
+      avg: row?.humidity_avg ?? null
     }
   });
 }
@@ -199,76 +244,72 @@ export async function getDailyStats(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
-  // parse date boundaries in UTC to avoid timezone surprises
   const from = new Date(`${date}T00:00:00.000Z`);
   const to = new Date(`${date}T23:59:59.999Z`);
+  const morningStart = new Date(`${date}T00:00:00.000Z`);
+  const morningEnd = new Date(`${date}T11:59:59.999Z`);
+  const afternoonStart = new Date(`${date}T12:00:00.000Z`);
+  const afternoonEnd = new Date(`${date}T23:59:59.999Z`);
 
-  const readings = await prisma.reading.findMany({
-    where: {
-      fridgeId: fridge.id,
-      recordedAt: {
-        gte: from,
-        lte: to
-      }
-    },
-    orderBy: { recordedAt: 'asc' },
-    select: { recordedAt: true, temperature: true }
-  });
+  const [row] = await prisma.$queryRaw`
+    WITH ordered AS (
+      SELECT
+        r."recordedAt" AS "recordedAt",
+        r."temperature" AS "temperature",
+        CASE
+          WHEN r."temperature" >= ${fridge.tempMin}
+            AND r."temperature" <= ${fridge.tempMax}
+            THEN EXTRACT(EPOCH FROM (
+              COALESCE(LEAD(r."recordedAt") OVER (ORDER BY r."recordedAt"), ${to.toISOString()}::timestamptz) - r."recordedAt"
+            )) * 1000
+          ELSE 0
+        END AS "inRangeMs",
+        CASE
+          WHEN r."temperature" < ${fridge.tempMin}
+            OR r."temperature" > ${fridge.tempMax}
+            THEN EXTRACT(EPOCH FROM (
+              COALESCE(LEAD(r."recordedAt") OVER (ORDER BY r."recordedAt"), ${to.toISOString()}::timestamptz) - r."recordedAt"
+            )) * 1000
+          ELSE 0
+        END AS "outRangeMs"
+      FROM "Reading" r
+      WHERE r."fridgeId" = ${fridge.id}
+        AND r."recordedAt" >= ${from}
+        AND r."recordedAt" <= ${to}
+    )
+    SELECT
+      COALESCE(SUM("inRangeMs"), 0)::int AS "inRangeMs",
+      COALESCE(SUM("outRangeMs"), 0)::int AS "outRangeMs",
+      COUNT(*)::int AS "readingsCount",
+      MIN(CASE WHEN "recordedAt" >= ${morningStart} AND "recordedAt" <= ${morningEnd} THEN "temperature" END) AS "morningMin",
+      MAX(CASE WHEN "recordedAt" >= ${morningStart} AND "recordedAt" <= ${morningEnd} THEN "temperature" END) AS "morningMax",
+      MIN(CASE WHEN "recordedAt" >= ${afternoonStart} AND "recordedAt" <= ${afternoonEnd} THEN "temperature" END) AS "afternoonMin",
+      MAX(CASE WHEN "recordedAt" >= ${afternoonStart} AND "recordedAt" <= ${afternoonEnd} THEN "temperature" END) AS "afternoonMax"
+    FROM ordered;
+  `;
 
-  // compute time in/out of range
-  let inRangeMs = 0;
-  let outRangeMs = 0;
-
-  const dayStart = from.getTime();
-  const dayEnd = to.getTime();
-
-  if (readings.length > 0) {
-    for (let i = 0; i < readings.length; i++) {
-      const cur = readings[i];
-      const next = readings[i + 1];
-      const curTs = new Date(cur.recordedAt).getTime();
-      const nextTs = next ? new Date(next.recordedAt).getTime() : dayEnd;
-      const duration = Math.max(0, Math.min(nextTs, dayEnd) - Math.max(curTs, dayStart));
-      const temp = cur.temperature;
-      if (temp >= fridge.tempMin && temp <= fridge.tempMax) {
-        inRangeMs += duration;
-      } else {
-        outRangeMs += duration;
-      }
-    }
-  }
-
-  // morning / afternoon min/max
-  const morningStart = new Date(`${date}T00:00:00.000Z`).getTime();
-  const morningEnd = new Date(`${date}T11:59:59.999Z`).getTime();
-  const afterStart = new Date(`${date}T12:00:00.000Z`).getTime();
-  const afterEnd = new Date(`${date}T23:59:59.999Z`).getTime();
-
-  let morningMin = null;
-  let morningMax = null;
-  let afterMin = null;
-  let afterMax = null;
-
-  for (const r of readings) {
-    const ts = new Date(r.recordedAt).getTime();
-    const t = r.temperature;
-    if (ts >= morningStart && ts <= morningEnd) {
-      morningMin = morningMin === null ? t : Math.min(morningMin, t);
-      morningMax = morningMax === null ? t : Math.max(morningMax, t);
-    }
-
-    if (ts >= afterStart && ts <= afterEnd) {
-      afterMin = afterMin === null ? t : Math.min(afterMin, t);
-      afterMax = afterMax === null ? t : Math.max(afterMax, t);
-    }
-  }
+  const result = row || {
+    inRangeMs: 0,
+    outRangeMs: 0,
+    readingsCount: 0,
+    morningMin: null,
+    morningMax: null,
+    afternoonMin: null,
+    afternoonMax: null
+  };
 
   return res.json({
-    inRangeMs,
-    outRangeMs,
-    morning: { min: morningMin, max: morningMax },
-    afternoon: { min: afterMin, max: afterMax },
-    readingsCount: readings.length
+    inRangeMs: Number(result.inRangeMs ?? 0),
+    outRangeMs: Number(result.outRangeMs ?? 0),
+    morning: {
+      min: result.morningMin === null ? null : Number(result.morningMin),
+      max: result.morningMax === null ? null : Number(result.morningMax)
+    },
+    afternoon: {
+      min: result.afternoonMin === null ? null : Number(result.afternoonMin),
+      max: result.afternoonMax === null ? null : Number(result.afternoonMax)
+    },
+    readingsCount: Number(result.readingsCount ?? 0)
   });
 }
 

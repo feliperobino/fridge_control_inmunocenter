@@ -8,7 +8,7 @@ export function getFridge(id) {
   return apiRequest(`/fridges/${id}`);
 }
 
-export function getFridgeReadings(id, from, to, limit = 70000) {
+export function getFridgeReadings(id, from, to, limit = 1440) {
   return apiRequest(
     `/fridges/${id}/readings?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}&limit=${limit}`
   );

@@ -61,7 +61,7 @@ export function FridgeCard({ fridge, onClick }) {
         const dateString = shiftLocalDate(getLocalDateString(), -dayOffset);
         const { from, to } = getLocalDayRange(dateString);
 
-        const resp = await getFridgeReadings(fridge.id, from, to, 10000);
+        const resp = await getFridgeReadings(fridge.id, from, to, 1440);
         const readings = Array.isArray(resp?.readings) ? resp.readings : [];
 
         // compute time in range and out of range
