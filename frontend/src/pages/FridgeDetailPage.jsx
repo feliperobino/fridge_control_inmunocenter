@@ -321,14 +321,18 @@ export default function FridgeDetailPage() {
             />
           </div>
 
-          <div className="card-shell">
+          <div className="card-shell fridge-events-card">
             <div className="section-heading">
               <div>
                 <span className="brand-kicker">Alarmas</span>
                 <h3>Eventos del refrigerador</h3>
               </div>
             </div>
-            <AlarmsList alarms={alarms} />
+            <div className="alarm-events-table-header" aria-hidden="true">
+              <span>Tipo de evento</span>
+              <span>Inicio y estado</span>
+            </div>
+            <AlarmsList alarms={alarms} scrollable />
           </div>
 
           {user?.role === 'ADMIN' && fridge ? (

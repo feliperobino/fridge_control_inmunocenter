@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { apiRequest } from '../api/client.js';
 import {
   createAlarmRecipient,
@@ -25,6 +25,7 @@ export default function AlarmsPage() {
   const [fridges, setFridges] = useState([]);
   const [alarms, setAlarms] = useState([]);
   const [status, setStatus] = useState('all');
+  const [period, setPeriod] = useState('all');
   const [fridgeId, setFridgeId] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -33,6 +34,16 @@ export default function AlarmsPage() {
   const [editingRecipientId, setEditingRecipientId] = useState('');
   const { isAdmin } = useAuth();
   const exportRange = getLast24HoursRange();
+  const visibleAlarms = useMemo(() => {
+    const now = Date.now();
+    const cutoff = period === '24h' ? now - 24 * 60 * 60 * 1000 : period === 'week' ? now - 7 * 24 * 60 * 60 * 1000 : null;
+
+    return alarms.filter((alarm) => {
+      if (period === 'open' && alarm.resolvedAt) return false;
+      if (cutoff && new Date(alarm.startedAt).getTime() < cutoff) return false;
+      return true;
+    });
+  }, [alarms, period]);
 
   useEffect(() => {
     let isMounted = true;
@@ -161,6 +172,16 @@ export default function AlarmsPage() {
                 ))}
               </select>
             </label>
+
+            <label>
+              Periodo
+              <select value={period} onChange={(event) => setPeriod(event.target.value)}>
+                <option value="all">Todas las fechas</option>
+                <option value="24h">Últimas 24 horas</option>
+                <option value="week">Última semana</option>
+                <option value="open">Solo pendientes</option>
+              </select>
+            </label>
           </div>
 
           <ExportButtons fridgeId="all" from={exportRange.from} to={exportRange.to} filenamePrefix="alarmas" />
@@ -172,7 +193,7 @@ export default function AlarmsPage() {
 
       {!isLoading && !error ? (
         <div className="card-shell">
-          <AlarmsList alarms={alarms} emptyMessage="No hay alarmas para los filtros seleccionados." />
+          <AlarmsList alarms={visibleAlarms} paginated scrollable emptyMessage="No hay alarmas para los filtros seleccionados." />
         </div>
       ) : null}
 

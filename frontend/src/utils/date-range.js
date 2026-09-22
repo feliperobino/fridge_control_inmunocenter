@@ -18,11 +18,48 @@ function parseDateParts(dateString) {
   return { year, month, day };
 }
 
+const CHILE_TIME_ZONE = 'America/Santiago';
+
+function getTimeZoneParts(date) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: CHILE_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(date);
+
+  return Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+}
+
+function getChileInstant(dateString, hour, minute, second, millisecond) {
+  const parts = parseDateParts(dateString) || parseDateParts(getLocalDateString());
+  const desiredUtc = Date.UTC(parts.year, parts.month - 1, parts.day, hour, minute, second, millisecond);
+  let instant = desiredUtc;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const actual = getTimeZoneParts(new Date(instant));
+    const actualAsUtc = Date.UTC(
+      actual.year,
+      actual.month - 1,
+      actual.day,
+      actual.hour,
+      actual.minute,
+      actual.second,
+      millisecond
+    );
+    instant += desiredUtc - actualAsUtc;
+  }
+
+  return new Date(instant);
+}
+
 export function getLocalDateString(date = new Date()) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  const parts = getTimeZoneParts(date);
+  return `${parts.year}-${String(parts.month).padStart(2, '0')}-${String(parts.day).padStart(2, '0')}`;
 }
 
 export function shiftLocalDate(dateString, dayOffset) {
@@ -33,9 +70,8 @@ export function shiftLocalDate(dateString, dayOffset) {
 }
 
 export function getLocalDayRange(dateString = getLocalDateString()) {
-  const parts = parseDateParts(dateString) || parseDateParts(getLocalDateString());
-  const from = new Date(parts.year, parts.month - 1, parts.day, 0, 0, 0, 0);
-  const to = new Date(parts.year, parts.month - 1, parts.day, 23, 59, 59, 999);
+  const from = getChileInstant(dateString, 0, 0, 0, 0);
+  const to = getChileInstant(dateString, 23, 59, 59, 999);
 
   return {
     fromDate: getLocalDateString(from),

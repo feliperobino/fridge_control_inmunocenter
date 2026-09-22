@@ -149,6 +149,15 @@ button,input,select,textarea{font:inherit}
 .admin-table-row strong{display:block}
 .admin-table-row small{display:block;color:var(--muted)}
 .button-row{display:flex;gap:8px}
+.filters-bar{display:flex;flex-wrap:wrap;gap:12px}
+.filters-bar label{display:grid;gap:6px;color:var(--muted);font-size:0.85rem}
+.filters-bar select{min-width:150px;padding:8px 10px;border:1px solid var(--border);border-radius:6px;background:var(--panel);color:var(--text)}
+.alarms-list-scroll{max-height:380px;overflow-y:auto;padding-right:4px}
+.list-pagination{display:flex;align-items:center;justify-content:center;gap:12px;margin-top:12px;color:var(--muted);font-size:0.9rem}
+.list-pagination .button{min-height:34px;padding:7px 10px}
+.fridge-events-card{display:flex;flex-direction:column;min-height:0}
+.alarm-events-table-header{position:sticky;top:0;z-index:1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;padding:0 12px 8px;background:var(--panel);color:var(--muted);font-size:0.78rem;text-transform:uppercase;letter-spacing:0.06em}
+.fridge-events-card .alarms-list-scroll{max-height:300px;overflow-y:auto}
 
 /* Charts */
 .chart-shell{display:grid;gap:12px}

@@ -10,12 +10,14 @@ import {
   XAxis,
   YAxis
 } from 'recharts';
+import { getLocalDateString } from '../utils/date-range.js';
 
 function formatTick(timestamp) {
   const date = new Date(timestamp);
   if (Number.isNaN(date.getTime())) return timestamp;
 
   return new Intl.DateTimeFormat('es-CL', {
+    timeZone: 'America/Santiago',
     hour: '2-digit',
     minute: '2-digit',
     hour12: false
@@ -84,11 +86,20 @@ function resampleReadings(readings, range, targetPoints = 180) {
 export function TempHistoryChart({ readings, fridge, selectedRange, onExtremesCalculated }) {
   const [showTemp, setShowTemp] = useState(true);
   const [showHum, setShowHum] = useState(true);
+  const isToday = selectedRange?.fromDate === getLocalDateString();
+  const effectiveRange = useMemo(() => {
+    if (!isToday || !selectedRange?.to) return selectedRange;
+
+    return {
+      ...selectedRange,
+      to: new Date(Math.min(new Date(selectedRange.to).getTime(), Date.now())).toISOString()
+    };
+  }, [isToday, selectedRange]);
 
   // 1. Datos promediados para graficar
   const data = useMemo(() => {
-    return resampleReadings(readings, selectedRange, 180);
-  }, [readings, selectedRange]);
+    return resampleReadings(readings, effectiveRange, 180);
+  }, [readings, effectiveRange]);
 
   // 2. Extremos calculados estrictamente sobre la curva promediada (resilientes al ruido)
   const smoothedExtremes = useMemo(() => {
@@ -118,22 +129,24 @@ export function TempHistoryChart({ readings, fridge, selectedRange, onExtremesCa
   }, [smoothedExtremes, onExtremesCalculated]);
 
   const xDomain = useMemo(() => {
-    if (selectedRange?.from && selectedRange?.to) {
-      return [new Date(selectedRange.from).getTime(), new Date(selectedRange.to).getTime()];
+    if (effectiveRange?.from && effectiveRange?.to) {
+      return [new Date(effectiveRange.from).getTime(), new Date(effectiveRange.to).getTime()];
     }
     return ['dataMin', 'dataMax'];
-  }, [selectedRange]);
+  }, [effectiveRange]);
 
   const ticks = useMemo(() => {
-    if (!selectedRange?.from) return undefined;
-    const start = new Date(selectedRange.from).getTime();
+    if (!effectiveRange?.from || !effectiveRange?.to) return undefined;
+    const start = new Date(effectiveRange.from).getTime();
+    const end = new Date(effectiveRange.to).getTime();
     const step = 3 * 3600 * 1000;
     const ticksArr = [];
-    for (let t = start; t <= start + 24 * 3600 * 1000; t += step) {
+    for (let t = start; t <= end; t += step) {
       ticksArr.push(t);
     }
+    if (ticksArr[ticksArr.length - 1] !== end) ticksArr.push(end);
     return ticksArr;
-  }, [selectedRange]);
+  }, [effectiveRange]);
 
   const tempDomain = useMemo(() => {
     if (!fridge) return ['auto', 'auto'];
@@ -244,6 +257,7 @@ export function TempHistoryChart({ readings, fridge, selectedRange, onExtremesCa
                 }}
                 labelFormatter={(ts) =>
                   new Intl.DateTimeFormat('es-CL', {
+                    timeZone: 'America/Santiago',
                     hour: '2-digit',
                     minute: '2-digit',
                     day: '2-digit',
