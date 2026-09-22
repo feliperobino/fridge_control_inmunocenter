@@ -7,6 +7,12 @@ services:
       POSTGRES_DB: fridge_monitor
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          memory: 250M
+        reservations:
+          memory: 100M
     logging:
       driver: json-file
       options:
@@ -39,6 +45,12 @@ services:
       - '3000:3000'
     depends_on:
       - postgres
+    deploy:
+      resources:
+        limits:
+          memory: 350M
+        reservations:
+          memory: 150M
     logging:
       driver: json-file
       options:

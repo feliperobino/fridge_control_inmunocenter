@@ -63,15 +63,17 @@ model Fridge {
 }
 
 model Reading {
-  id         String   @id @default(uuid())
-  fridge     Fridge   @relation(fields: [fridgeId], references: [id])
-  fridgeId   String
+  id          String   @id @default(uuid())
+  fridge      Fridge   @relation(fields: [fridgeId], references: [id])
+  fridgeId    String
   temperature Float
   humidity    Float
   recordedAt  DateTime
   receivedAt  DateTime @default(now())
   createdAt   DateTime @default(now())
 
+  @@index([fridgeId])
+  @@index([createdAt])
   @@index([fridgeId, recordedAt])
 }
 
