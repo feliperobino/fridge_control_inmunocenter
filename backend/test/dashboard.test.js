@@ -108,6 +108,7 @@ describe('dashboard APIs', () => {
     const fridge = response.body.find((item) => item.modbusSlaveId === testFridge.modbusSlaveId);
 
     expect(Array.isArray(response.body)).toBe(true);
+    expect(new Date(fridge.latestReading.recordedAt).toISOString()).toBe('2026-08-07T14:00:00.000Z');
     expect(fridge).toMatchObject({
       name: testFridge.name,
       latestReading: {
@@ -126,6 +127,7 @@ describe('dashboard APIs', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
+    expect(new Date(response.body.latestReading.recordedAt).toISOString()).toBe('2026-08-07T14:00:00.000Z');
     expect(response.body).toMatchObject({
       id: fridge.id,
       name: testFridge.name,

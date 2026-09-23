@@ -100,7 +100,7 @@ export async function listFridges(req, res) {
         'fridgeId', lr."fridgeId",
         'temperature', lr.temperature,
         'humidity', lr.humidity,
-        'recordedAt', lr."recordedAt",
+        'recordedAt', lr."recordedAt" AT TIME ZONE 'UTC',
         'receivedAt', lr."receivedAt"
       ) AS "latestReading"
     FROM "Fridge" f
@@ -137,7 +137,7 @@ export async function getFridge(req, res) {
         'fridgeId', lr."fridgeId",
         'temperature', lr.temperature,
         'humidity', lr.humidity,
-        'recordedAt', lr."recordedAt",
+        'recordedAt', lr."recordedAt" AT TIME ZONE 'UTC',
         'receivedAt', lr."receivedAt"
       ) AS "latestReading"
     FROM "Fridge" f
@@ -202,7 +202,7 @@ export async function listReadings(req, res) {
         r."fridgeId" AS "fridgeId",
         AVG(r.temperature)::float AS "temperature",
         AVG(r.humidity)::float AS "humidity",
-        DATE_TRUNC('minute', r."recordedAt") AS "recordedAt",
+        DATE_TRUNC('minute', r."recordedAt") AT TIME ZONE 'UTC' AS "recordedAt",
         MAX(r."receivedAt") AS "receivedAt"
       FROM "Reading" r
       WHERE r."fridgeId" = ${fridge.id}
