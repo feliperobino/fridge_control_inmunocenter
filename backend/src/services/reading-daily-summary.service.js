@@ -2,12 +2,19 @@ import crypto from 'node:crypto';
 import prisma from '../config/prisma.js';
 
 export async function updateReadingDailySummary({ fridge, temperature, humidity, recordedAt }) {
-  const day = new Date(Date.UTC(
-    recordedAt.getUTCFullYear(),
-    recordedAt.getUTCMonth(),
-    recordedAt.getUTCDate()
-  ));
-  const hourMask = 1 << recordedAt.getUTCHours();
+  const localParts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hourCycle: 'h23'
+  }).formatToParts(recordedAt);
+  const values = Object.fromEntries(
+    localParts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)])
+  );
+  const day = new Date(Date.UTC(values.year, values.month - 1, values.day));
+  const hourMask = 1 << values.hour;
   const temperatureOut = temperature < fridge.tempMin || temperature > fridge.tempMax ? 1 : 0;
   const humidityOut = humidity < fridge.humMin || humidity > fridge.humMax ? 1 : 0;
 

@@ -7,7 +7,11 @@ function formatTime(isoString) {
   if (!isoString) return null;
   const d = new Date(isoString);
   if (Number.isNaN(d.getTime())) return null;
-  return d.toLocaleTimeString('es-CL', { hour: '2-digit', minute: '2-digit' });
+  return d.toLocaleTimeString('es-CL', {
+    timeZone: 'America/Santiago',
+    hour: '2-digit',
+    minute: '2-digit'
+  });
 }
 
 // helper to check temp range only (as requirement states 2-8°C range)
@@ -90,11 +94,11 @@ export function FridgeCard({ fridge, onClick }) {
         }
 
         // compute morning/afternoon min/max
-        const dayStartDate = new Date(from);
-        const morningStart = dayStartDate.getTime();
-        const morningEnd = new Date(dayStartDate).setHours(11, 59, 59, 999);
-        const afterStart = new Date(dayStartDate).setHours(12, 0, 0, 0);
-        const afterEnd = new Date(dayStartDate).setHours(23, 59, 59, 999);
+        const noon = dayStart + (dayEnd - dayStart + 1) / 2;
+        const morningStart = dayStart;
+        const morningEnd = noon - 1;
+        const afterStart = noon;
+        const afterEnd = dayEnd;
 
         let morningMin = null;
         let morningMax = null;

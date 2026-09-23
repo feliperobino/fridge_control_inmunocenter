@@ -27,6 +27,29 @@ function parseDateFilter(value) {
   return parsed;
 }
 
+function getChileDayRange(dateString) {
+  const [year, month, day] = dateString.split('-').map(Number);
+  const localAsUtc = Date.UTC(year, month - 1, day);
+  const getOffset = (timestamp) => {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'America/Santiago',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23'
+    }).formatToParts(new Date(timestamp));
+    const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
+    return Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second) - timestamp;
+  };
+  const from = new Date(localAsUtc - getOffset(localAsUtc));
+  const to = new Date(localAsUtc + 24 * 60 * 60 * 1000 - getOffset(localAsUtc + 24 * 60 * 60 * 1000) - 1);
+
+  return { from, to };
+}
+
 function withLatestReading(fridge) {
   const [latestReading] = fridge.readings || [];
 
@@ -253,12 +276,12 @@ export async function getDailyStats(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
-  const from = new Date(`${date}T00:00:00.000Z`);
-  const to = new Date(`${date}T23:59:59.999Z`);
-  const morningStart = new Date(`${date}T00:00:00.000Z`);
-  const morningEnd = new Date(`${date}T11:59:59.999Z`);
-  const afternoonStart = new Date(`${date}T12:00:00.000Z`);
-  const afternoonEnd = new Date(`${date}T23:59:59.999Z`);
+  const { from, to } = getChileDayRange(date);
+  const midpoint = new Date(from.getTime() + (to.getTime() - from.getTime() + 1) / 2);
+  const morningStart = from;
+  const morningEnd = new Date(midpoint.getTime() - 1);
+  const afternoonStart = midpoint;
+  const afternoonEnd = to;
 
   const [row] = await prisma.$queryRaw`
     WITH ordered AS (
