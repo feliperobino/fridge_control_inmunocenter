@@ -71,7 +71,10 @@ export function shiftLocalDate(dateString, dayOffset) {
 
 export function getLocalDayRange(dateString = getLocalDateString()) {
   const from = getChileInstant(dateString, 0, 0, 0, 0);
-  const to = getChileInstant(dateString, 23, 59, 59, 999);
+  const endOfDay = getChileInstant(dateString, 23, 59, 59, 999);
+  const to = dateString === getLocalDateString()
+    ? new Date(Math.min(endOfDay.getTime(), Date.now()))
+    : endOfDay;
 
   return {
     fromDate: getLocalDateString(from),

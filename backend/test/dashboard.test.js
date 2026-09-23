@@ -145,7 +145,7 @@ describe('dashboard APIs', () => {
     const fridge = await prisma.fridge.findUnique({ where: { modbusSlaveId: testFridge.modbusSlaveId } });
 
     const response = await request(app)
-      .get(`/api/fridges/${fridge.id}/readings?limit=2&offset=1`)
+      .get(`/api/fridges/${fridge.id}/readings?from=2026-08-07T00:00:00.000Z&to=2026-08-08T00:00:00.000Z&limit=2&offset=1`)
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
@@ -209,6 +209,39 @@ describe('dashboard APIs', () => {
         recordedAt: '2026-08-07T20:00:00.000Z'
       })
     ]));
+  });
+
+  it('defaults readings and stats to the current Chile day', async () => {
+    const token = await login('phase4-user@example.com', 'UserPassword123!');
+    const fridge = await prisma.fridge.findUnique({ where: { modbusSlaveId: testFridge.modbusSlaveId } });
+    const now = new Date();
+
+    await prisma.reading.create({
+      data: {
+        fridgeId: fridge.id,
+        temperature: 4,
+        humidity: 35,
+        recordedAt: new Date(now.getTime() - 60_000)
+      }
+    });
+
+    const [readingsResponse, statsResponse] = await Promise.all([
+      request(app)
+        .get(`/api/fridges/${fridge.id}/readings`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200),
+      request(app)
+        .get(`/api/fridges/${fridge.id}/stats`)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+    ]);
+
+    expect(readingsResponse.body.pagination.total).toBe(1);
+    expect(readingsResponse.body.readings[0]).toMatchObject({ temperature: 4, humidity: 35 });
+    expect(statsResponse.body).toMatchObject({
+      temperature: { min: 4, max: 4, avg: 4 },
+      humidity: { min: 35, max: 35, avg: 35 }
+    });
   });
 
   it('returns min max avg stats for a date range', async () => {

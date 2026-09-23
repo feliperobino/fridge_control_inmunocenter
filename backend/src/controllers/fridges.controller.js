@@ -27,6 +27,10 @@ function parseDateFilter(value) {
   return parsed;
 }
 
+function toDatabaseTimestamp(date) {
+  return date.toISOString().replace('T', ' ').replace('Z', '');
+}
+
 function getChileDayRange(dateString) {
   const [year, month, day] = dateString.split('-').map(Number);
   const localAsUtc = Date.UTC(year, month - 1, day);
@@ -42,12 +46,29 @@ function getChileDayRange(dateString) {
       hourCycle: 'h23'
     }).formatToParts(new Date(timestamp));
     const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, Number(part.value)]));
-    return Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second) - timestamp;
+    const timestampWithoutMilliseconds = Math.floor(timestamp / 1000) * 1000;
+    return Date.UTC(values.year, values.month - 1, values.day, values.hour, values.minute, values.second) - timestampWithoutMilliseconds;
   };
   const from = new Date(localAsUtc - getOffset(localAsUtc));
   const to = new Date(localAsUtc + 24 * 60 * 60 * 1000 - getOffset(localAsUtc + 24 * 60 * 60 * 1000) - 1);
 
   return { from, to };
+}
+
+function getChileDateString(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Santiago',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.filter((part) => part.type !== 'literal').map((part) => [part.type, part.value]));
+  return `${values.year}-${values.month}-${values.day}`;
+}
+
+function getTodayRange() {
+  const { from, to: endOfDay } = getChileDayRange(getChileDateString());
+  return { from, to: new Date(Math.min(endOfDay.getTime(), Date.now())) };
 }
 
 function withLatestReading(fridge) {
@@ -158,8 +179,11 @@ export async function listReadings(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
-  const start = from ?? new Date('1970-01-01T00:00:00.000Z');
-  const end = to ?? new Date();
+  const today = getTodayRange();
+  const start = from ?? today.from;
+  const end = to ?? today.to;
+  const startTimestamp = toDatabaseTimestamp(start);
+  const endTimestamp = toDatabaseTimestamp(end);
   const [countRows, readings] = await Promise.all([
     prisma.$queryRaw`
       SELECT COUNT(*)::int AS "total"
@@ -167,8 +191,8 @@ export async function listReadings(req, res) {
         SELECT DATE_TRUNC('minute', r."recordedAt")
         FROM "Reading" r
         WHERE r."fridgeId" = ${fridge.id}
-          AND r."recordedAt" >= ${start}
-          AND r."recordedAt" <= ${end}
+          AND r."recordedAt" >= ${startTimestamp}::timestamp
+          AND r."recordedAt" <= ${endTimestamp}::timestamp
         GROUP BY DATE_TRUNC('minute', r."recordedAt")
       ) minute_buckets;
     `,
@@ -182,8 +206,8 @@ export async function listReadings(req, res) {
         MAX(r."receivedAt") AS "receivedAt"
       FROM "Reading" r
       WHERE r."fridgeId" = ${fridge.id}
-        AND r."recordedAt" >= ${start}
-        AND r."recordedAt" <= ${end}
+        AND r."recordedAt" >= ${startTimestamp}::timestamp
+        AND r."recordedAt" <= ${endTimestamp}::timestamp
       GROUP BY r."fridgeId", DATE_TRUNC('minute', r."recordedAt")
       ORDER BY DATE_TRUNC('minute', r."recordedAt") ASC
       OFFSET ${offset}
@@ -221,6 +245,9 @@ export async function getStats(req, res) {
     return res.status(404).json({ error: 'Fridge not found' });
   }
 
+  const today = getTodayRange();
+  const startTimestamp = toDatabaseTimestamp(from ?? today.from);
+  const endTimestamp = toDatabaseTimestamp(to ?? today.to);
   const stats = from || to
     ? await prisma.$queryRaw`
         SELECT
@@ -232,8 +259,8 @@ export async function getStats(req, res) {
           AVG("humidity")::float AS "humidity_avg"
         FROM "Reading"
         WHERE "fridgeId" = ${fridge.id}
-          AND "recordedAt" >= ${from ?? new Date('1970-01-01T00:00:00.000Z')}
-          AND "recordedAt" <= ${to ?? new Date()}
+          AND "recordedAt" >= ${startTimestamp}::timestamp
+          AND "recordedAt" <= ${endTimestamp}::timestamp
       `
     : await prisma.$queryRaw`
         SELECT
@@ -245,6 +272,8 @@ export async function getStats(req, res) {
           AVG("humidity")::float AS "humidity_avg"
         FROM "Reading"
         WHERE "fridgeId" = ${fridge.id}
+          AND "recordedAt" >= ${startTimestamp}::timestamp
+          AND "recordedAt" <= ${endTimestamp}::timestamp
       `;
 
   const row = Array.isArray(stats) ? stats[0] : null;
